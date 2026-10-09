@@ -1,4 +1,3 @@
-
 import {
   BadgeCheck,
   Star,
@@ -8,8 +7,8 @@ import {
 
 export default function Hero() {
   return (
-    <section className="overflow-hidden bg-[#F8F3E8] text-[#211C14]">
-      <div className="mx-auto grid max-w-[1320px] items-center gap-12 py-12 md:px-10 lg:min-h-[520px] lg:grid-cols-[0.9fr_1.1fr] lg:py-16">
+    <section className="overflow-hidden bg-[#F8F3E8] px-5 py-5 text-[#211C14] sm:px-8 lg:px-12">
+      <div className="mx-auto grid max-w-[1320px] items-center gap-10 lg:min-h-[520px] lg:grid-cols-[0.9fr_1.1fr] lg:gap-3">
 
         {/* COLUNA ESQUERDA */}
         <div className="flex flex-col items-start">
@@ -17,13 +16,14 @@ export default function Hero() {
           {/* Selo da coleção */}
           <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-[#E9DCC4] bg-[#FCFAF5] px-3 py-1.5">
             <span className="h-1.5 w-1.5 rounded-full bg-[#B9975B]" />
+
             <span className="text-[10px] font-medium uppercase tracking-[0.2em] text-[#8A6531]">
               Nova coleção · Dourada Essência
             </span>
           </div>
 
           {/* Título */}
-          <h1 className="max-w-[460px] font-serif text-4xl leading-[1.05] tracking-[-0.035em] sm:text-5xl lg:text-[44px]">
+          <h1 className="max-w-[500px] font-serif text-4xl leading-[1.05] tracking-[-0.035em] sm:text-5xl lg:text-[45px] xl:text-[55px]">
             Brilho de alta joalheria, preço de semijoia
           </h1>
 
@@ -55,7 +55,10 @@ export default function Hero() {
           {/* Indicadores */}
           <div className="mt-8 grid w-full max-w-[440px] grid-cols-3">
             <div className="border-r border-[#E7DCC9] pr-3">
-              <p className="font-serif text-2xl leading-none">4.9</p>
+              <p className="font-serif text-2xl leading-none">
+                4.9
+              </p>
+
               <p className="mt-1 flex items-center gap-1 text-[10px] text-[#958777]">
                 <Star size={11} fill="currentColor" />
                 32 mil avaliações
@@ -63,14 +66,20 @@ export default function Hero() {
             </div>
 
             <div className="border-r border-[#E7DCC9] px-4">
-              <p className="font-serif text-2xl leading-none">+48 mil</p>
+              <p className="font-serif text-2xl leading-none">
+                +48 mil
+              </p>
+
               <p className="mt-1 text-[10px] text-[#958777]">
                 peças entregues
               </p>
             </div>
 
             <div className="pl-4">
-              <p className="font-serif text-2xl leading-none">1 ano</p>
+              <p className="font-serif text-2xl leading-none">
+                1 ano
+              </p>
+
               <p className="mt-1 text-[10px] text-[#958777]">
                 de garantia no banho
               </p>
@@ -79,64 +88,76 @@ export default function Hero() {
         </div>
 
         {/* COLUNA DIREITA */}
-        <div className="relative mx-auto w-full max-w-[570px] pb-28 sm:pb-32 lg:pb-24">
+        <div className="relative mx-auto w-full max-w-[520px] lg:max-w-none">
 
-          {/* Imagem principal */}
-          <div className="h-[300px] w-[57%] overflow-hidden rounded-[22px] bg-[#E6D9C4] sm:h-[365px] lg:h-[365px]">
-            <img
-              src="/assets/images/colar.png"
-              alt="Colar dourado com pérolas"
-              className="h-full w-full object-cover"
-            />
+          <div className="grid grid-cols-[1.05fr_0.95fr] items-center gap-3 sm:gap-5">
+
+            {/* Imagem principal: colar */}
+            <div className="h-[250px] overflow-hidden rounded-[22px] bg-[#E6D9C4] sm:h-[365px] lg:h-[375px] xl:h-[420px]">
+              <img
+                src="/assets/images/colar.png"
+                alt="Colar dourado com pérolas"
+                className="h-full w-full object-cover"
+              />
+            </div>
+
+            {/* Coluna secundária */}
+            <div className="flex min-w-0 flex-col gap-3 sm:gap-4">
+
+              {/* Imagem dos brincos */}
+              <div className="h-[175px] overflow-hidden rounded-[20px] bg-[#E6D9C4] sm:h-[275px] lg:h-[245px]">
+                <img
+                  src="/assets/images/brincos.png"
+                  alt="Brincos dourados"
+                  className="h-full w-full object-cover"
+                />
+              </div>
+
+              {/* Card do produto em destaque */}
+              <div className="flex min-h-[76px] items-center gap-2 rounded-[18px] border border-[#E9DCC4] bg-[#FCFAF5] p-2 sm:min-h-[88px] sm:gap-3 sm:p-3">
+
+                <img
+                  src="/assets/images/anel.png"
+                  alt="Anel cravejado dourado"
+                  className="h-10 w-10 shrink-0 rounded-xl object-cover sm:h-12 sm:w-12"
+                />
+
+                <div className="min-w-0 flex-1">
+                  <p className="text-[8px] uppercase tracking-[0.12em] text-[#9B7947] sm:text-[9px] sm:tracking-[0.18em]">
+                    Mais vendido
+                  </p>
+
+                  <p className="truncate text-[10px] font-medium sm:text-xs">
+                    Anel Aura cravejado
+                  </p>
+
+                  <p className="mt-1 whitespace-nowrap text-[10px] font-semibold sm:text-xs">
+                    R$ 189
+
+                    <span className="ml-1 font-normal text-[#A69B8B] line-through sm:ml-2">
+                      R$ 259
+                    </span>
+                  </p>
+                </div>
+
+                <a
+                  href="/produtos/anel-aura"
+                  aria-label="Ver anel Aura"
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#211C14] text-white transition-transform duration-300 hover:translate-x-1 sm:h-9 sm:w-9"
+                >
+                  <ArrowRight size={17} />
+                </a>
+              </div>
+            </div>
           </div>
 
           {/* Selo de autenticidade */}
-          <div className="absolute left-[34%] top-5 z-20 inline-flex items-center gap-2 rounded-full border border-[#E9DCC4] bg-[#FCFAF5] px-4 py-2 shadow-sm">
-            <BadgeCheck size={14} />
-            <span className="whitespace-nowrap text-[10px] font-medium">
+          <div className="absolute left-1/2 top-4 z-20 inline-flex max-w-[calc(100%-16px)] -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-[#E9DCC4] bg-[#FCFAF5] px-3 py-2 shadow-sm sm:left-[42%] sm:px-4">
+            <BadgeCheck size={14} className="shrink-0" />
+
+            <span className="text-[9px] font-medium sm:text-[10px]">
               Banho ouro 18k certificado
             </span>
-          </div>
-
-          {/* Imagem secundária */}
-          <div className="absolute right-0 top-8 h-[220px] w-[49%] overflow-hidden rounded-[20px] bg-[#E6D9C4] sm:top-8 sm:h-[275px] lg:h-[275px]">
-            <img
-              src="/assets/images/brincos.png"
-              alt="Brincos dourados"
-              className="h-full w-full object-cover"
-            />
-          </div>
-
-          {/* Card do produto em destaque */}
-          <div className="absolute bottom-0 right-0 flex min-h-[88px] w-[49%] items-center gap-3 rounded-[20px] border border-[#E9DCC4] bg-[#FCFAF5] p-3 sm:bottom-0">
-            <img
-              src="/assets/images/anel.png"
-              alt="Anel cravejado dourado"
-              className="h-12 w-12 shrink-0 rounded-xl object-cover"
-            />
-
-            <div className="min-w-0 flex-1">
-              <p className="text-[9px] uppercase tracking-[0.18em] text-[#9B7947]">
-                Mais vendido
-              </p>
-              <p className="truncate text-xs font-medium">
-                Anel Aura cravejado
-              </p>
-              <p className="mt-1 whitespace-nowrap text-xs font-semibold">
-                R$ 189
-                <span className="ml-2 font-normal text-[#A69B8B] line-through">
-                  R$ 259
-                </span>
-              </p>
-            </div>
-
-            <a
-              href="/produtos/anel-aura"
-              aria-label="Ver anel Aura"
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#211C14] text-white transition-transform duration-300 hover:translate-x-1"
-            >
-              <ArrowRight size={19} />
-            </a>
           </div>
         </div>
       </div>

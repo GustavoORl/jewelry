@@ -11,19 +11,19 @@ const categorias = [
   {
     nome: "Brincos",
     quantidade: "980 peças",
-    imagem: "assets/images/categoria_brincos.png",
+    imagem: "/assets/images/categoria_brincos.png",
     slug: "brincos",
   },
   {
     nome: "Anéis",
     quantidade: "760 peças",
-    imagem: "assets/images/categoria_aneis.png",
+    imagem: "/assets/images/categoria_aneis.png",
     slug: "aneis",
   },
   {
     nome: "Pulseiras",
     quantidade: "640 peças",
-    imagem: "assets/images/categoria_pulseiras.png",
+    imagem: "/assets/images/categoria_pulseiras.png",
     slug: "pulseiras",
   },
 ];

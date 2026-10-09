@@ -44,7 +44,7 @@ export default function Footer() {
     <footer className="border-t border-white/10 bg-[#211C14] text-[#F8F3E8]">
 
       {/* Conteúdo principal */}
-      <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-10 px-6 py-12 sm:px-8 md:grid-cols-2 lg:grid-cols-[1.3fr_0.55fr_0.55fr_1.2fr] lg:gap-12 lg:px-12 lg:py-12">
+      <div className="mx-auto grid max-w-[1320px] grid-cols-1 gap-10 px-6 py-12 sm:px-8 md:grid-cols-2 lg:grid-cols-[1.3fr_0.55fr_0.55fr_1.2fr] lg:gap-12 lg:px-12 xl:px-0 lg:py-12">
 
         {/* Marca */}
         <div>

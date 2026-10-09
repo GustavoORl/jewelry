@@ -35,9 +35,9 @@ export default function Header() {
 
     return (
         <header className="w-full bg-[#FAF9F5] text-[#211C14]">
-            <div className="bg-[#211C14] px-5 py-3 text-[#F5F0E6]">
-                <div className="mx-auto flex max-w-[1320px] px-5 items-center justify-between">
-                    <p className="text-[10px] tracking-[0.2em] sm:text-xs sm:tracking-[0.25em]">
+            <div className="bg-[#211C14] py-3 lg:px-12 text-[#F5F0E6]">
+                <div className="mx-auto flex max-w-[1320px] lg:px-0 items-center justify-between max-sm:px-5">
+                    <p className="text-[10px] max-sm:text-[9px] tracking-[0.2em] sm:text-xs sm:tracking-[0.25em]">
                         FRETE GRÁTIS ACIMA DE R$ 299 · TROCA EM ATÉ 30 DIAS
                     </p>
 
@@ -59,7 +59,7 @@ export default function Header() {
             </div>
 
             {/* Cabeçalho principal */}
-            <div className="mx-auto max-w-[1320px] sm:px-8 lg:px-12">
+            <div className="mx-auto max-w-[1320px] max-sm:px-5 max-xl:px-12">
                 <div className="flex min-h-[112px] items-center justify-between gap-5 py-5">
                     {/* Logo */}
                     <a
