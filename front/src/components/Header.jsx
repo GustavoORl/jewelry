@@ -115,8 +115,8 @@ export default function Header() {
                         </a>
 
                         <a
-                            href="/minha-conta"
-                            aria-label="Minha conta"
+                            href="/login"
+                            aria-label="login"
                             className="hidden h-12 w-12 items-center justify-center rounded-full border border-[#E7E0CE] transition-colors hover:bg-[#F3EFE3] sm:flex"
                         >
                             <UserRound size={23} strokeWidth={2} />
