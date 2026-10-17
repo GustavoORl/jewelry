@@ -105,8 +105,8 @@ export default function Login() {
 
       // Armazenamento temporário para desenvolvimento.
       // Para produção, prefira uma sessão com cookie HttpOnly.
-      sessionStorage.setItem("aurelia_token", resultado.token);
-      sessionStorage.setItem("aurelia_usuario", JSON.stringify(resultado.usuario));
+      sessionStorage.setItem("aurora_token", resultado.token);
+      sessionStorage.setItem("aurora_usuario", JSON.stringify(resultado.usuario));
 
       setSucesso("Login realizado com sucesso!");
       navigate("/");
@@ -138,7 +138,7 @@ export default function Login() {
 
           >
 
-            AURELIA
+            AURORA
 
           </a>
 
@@ -204,7 +204,7 @@ export default function Login() {
 
           <p className="relative z-10 text-xs text-[#A69B8B]">
 
-            © 2026 AURELIA. Todos os direitos reservados.
+            © 2026 AURORA. Todos os direitos reservados.
 
           </p>
 
