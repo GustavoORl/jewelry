@@ -5,11 +5,14 @@ import {
   criarProduto,
   listarProdutos,
   buscarProdutoPorId,
+  excluirProduto,
+  atualizarProduto,
+  atualizarStatusProdutoService
 } from "../../services/produtoService.js";
 
 export async function cadastrarProduto(req, res) {
   try {
-    const produto = await criarProduto(req.body);
+    const produto = await criarProduto(req.body, req.file);
 
     return res.status(201).json({
       sucesso: true,
@@ -95,4 +98,103 @@ export async function obterProdutoPorId(req, res) {
       mensagem: "Erro ao consultar produto.",
     });
   }
+}
+
+
+
+export async function excluirProdutoController(req, res, next) {
+  try {
+    const { id } = req.params;
+
+    const resultado = await excluirProduto(id);
+
+    return res.status(200).json({
+      sucesso: true,
+      mensagem: "Produto excluído com sucesso.",
+      produto: resultado,
+      aviso:
+        resultado.falhasAoRemoverImagens > 0
+          ? "O produto foi excluído, mas algumas imagens não puderam ser removidas do armazenamento."
+          : null,
+    });
+  } catch (erro) {
+    if (erro.message === "PRODUTO_NAO_ENCONTRADO") {
+      return res.status(404).json({
+        sucesso: false,
+        mensagem: "Produto não encontrado.",
+      });
+    }
+
+    if (erro.code === "P2003") {
+      return res.status(409).json({
+        sucesso: false,
+        mensagem:
+          "Não foi possível excluir o produto porque existem registros relacionados a ele.",
+      });
+    }
+
+    console.error("Erro ao excluir produto:", erro);
+
+    return next(erro);
+  }
+}
+
+
+export async function atualizarProdutoController(req, res, next) {
+  try {
+    const { id } = req.params;
+    const dados = req.body;
+
+    if (!id) {
+      return res.status(400).json({
+        mensagem: "O ID do produto é obrigatório.",
+      });
+    }
+
+    if (
+      (!dados || Object.keys(dados).length === 0) &&
+      !req.file
+    ) {
+      return res.status(400).json({
+        mensagem: "Informe dados ou uma imagem para atualizar o produto.",
+      });
+    }
+
+    const produto = await atualizarProduto(
+      id,
+      dados ?? {},
+      req.file
+    );
+
+    return res.status(200).json({
+      sucesso: true,
+      mensagem: "Produto atualizado com sucesso.",
+      produto,
+    });
+  } catch (erro) {
+    if (erro.message === "PRODUTO_NAO_ENCONTRADO") {
+      return res.status(404).json({
+        sucesso: false,
+        mensagem: "Produto não encontrado.",
+      });
+    }
+
+    return next(erro);
+  }
+}
+
+export async function atualizarStatusProdutoController(req, res, next) {
+    try {
+        const { id } = req.params;
+        const { ativo } = req.body;
+
+        const produto = await atualizarStatusProdutoService(id, ativo);
+
+        return res.status(200).json({
+            mensagem: `Produto ${ativo ? "ativado" : "desativado"} com sucesso.`,
+            produto,
+        });
+    } catch (erro) {
+        return next(erro);
+    }
 }

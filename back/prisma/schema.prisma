@@ -71,11 +71,25 @@ model Categoria {
   nome         String
   slug         String   @unique
   descricao    String?
-  ativa        Boolean  @default(true)
+  ativo       Boolean  @default(true)
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
   produtos Produto[]
+  imagens ImagemCategoria[]
+}
+
+model ImagemCategoria {
+  id              String   @id @default(cuid())
+  categoriaId     String
+  url             String
+  textoAlternativo String?
+  posicao         Int      @default(0)
+  criadoEm        DateTime @default(now())
+
+  categoria Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+
+  @@index([categoriaId])
 }
 
 model Produto {

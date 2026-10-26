@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   Search,
   Plus,
@@ -17,60 +17,15 @@ import {
 import Sidebar from "../../components/admin/Sidebar.jsx";
 import AdminHeader from "../../components/admin/AdminHeader.jsx";
 
-const CATEGORIAS_INICIAIS = [
-  {
-    id: 1,
-    nome: "Anéis",
-    slug: "aneis",
-    descricao: "Anéis para ocasiões especiais e uso diário.",
-    produtos: 18,
-    status: "Ativa",
-    cor: "#E8DCC7",
-  },
-  {
-    id: 2,
-    nome: "Colares",
-    slug: "colares",
-    descricao: "Colares delicados, correntes e pingentes.",
-    produtos: 24,
-    status: "Ativa",
-    cor: "#D7E2D2",
-  },
-  {
-    id: 3,
-    nome: "Brincos",
-    slug: "brincos",
-    descricao: "Brincos clássicos e contemporâneos.",
-    produtos: 32,
-    status: "Ativa",
-    cor: "#E8D6D8",
-  },
-  {
-    id: 4,
-    nome: "Pulseiras",
-    slug: "pulseiras",
-    descricao: "Pulseiras e braceletes para complementar o visual.",
-    produtos: 12,
-    status: "Ativa",
-    cor: "#D9DDEE",
-  },
-  {
-    id: 5,
-    nome: "Noivas",
-    slug: "noivas",
-    descricao: "Peças selecionadas para noivas e cerimônias.",
-    produtos: 9,
-    status: "Inativa",
-    cor: "#F0E7C9",
-  },
-];
+const API_URL = import.meta.env.VITE_API_URL;
 
 const vazia = {
   nome: "",
   slug: "",
   descricao: "",
   status: "Ativa",
-  cor: "#E8DCC7",
+  imagem: null,
+  imagemPreview: "",
 };
 
 const inputClass =
@@ -84,6 +39,34 @@ function gerarSlug(valor) {
     .trim()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+async function requisicao(endpoint, opcoes = {}) {
+  if (!API_URL) throw new Error("Configure VITE_API_URL no .env do frontend.");
+  const token = sessionStorage.getItem("aurora_token");
+  const ehFormData = typeof FormData !== "undefined" && opcoes.body instanceof FormData;
+  const resposta = await fetch(`${API_URL}${endpoint}`, {
+    ...opcoes,
+    headers: {
+      ...(opcoes.body && !ehFormData ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...opcoes.headers,
+    },
+  });
+  const resultado = resposta.status === 204 ? {} : await resposta.json().catch(() => ({}));
+  if (!resposta.ok) throw new Error(resultado.mensagem || resultado.message || `Erro na requisição (${resposta.status}).`);
+  return resultado;
+}
+
+function normalizarCategoria(categoria) {
+  return {
+    ...categoria,
+    status: categoria.ativo === false || categoria.status === "Inativa" ? "Inativa" : "Ativa",
+    descricao: categoria.descricao || "",
+    imagemUrl: categoria.imagens?.[0]?.url || categoria.imagemUrl || "",
+    imagemUrl: categoria.imagens?.[0]?.url || categoria.imagemUrl || "",
+    produtos: categoria._count?.produtos ?? categoria.produtos?.length ?? (typeof categoria.produtos === "number" ? categoria.produtos : 0),
+  };
 }
 
 function Modal({ titulo, subtitulo, onClose, children, largura = "max-w-xl" }) {
@@ -111,7 +94,13 @@ function Modal({ titulo, subtitulo, onClose, children, largura = "max-w-xl" }) {
 }
 
 export default function AdminCategorias() {
-  const [categorias, setCategorias] = useState(CATEGORIAS_INICIAIS);
+
+
+  const [categorias, setCategorias] = useState([]);
+  const [carregando, setCarregando] = useState(true);
+  const [salvando, setSalvando] = useState(false);
+  const [erroGeral, setErroGeral] = useState("");
+  const [aviso, setAviso] = useState("");
   const [busca, setBusca] = useState("");
   const [filtroStatus, setFiltroStatus] = useState("Todas");
   const [modalAberto, setModalAberto] = useState(false);
@@ -120,27 +109,46 @@ export default function AdminCategorias() {
   const [form, setForm] = useState(vazia);
   const [erro, setErro] = useState("");
 
+  const [erroExclusao, setErroExclusao] = useState("");
+
+  useEffect(() => {
+    carregarCategorias();
+  }, []);
+
+  async function carregarCategorias() {
+    try {
+      setCarregando(true);
+      setErroGeral("");
+      const resultado = await requisicao("/categorias");
+      const lista = Array.isArray(resultado) ? resultado : resultado.categorias;
+      if (!Array.isArray(lista)) throw new Error("A API não retornou uma lista de categorias.");
+      setCategorias(lista.map(normalizarCategoria));
+    } catch (error) {
+      setErroGeral(error.message || "Não foi possível carregar as categorias.");
+    } finally {
+      setCarregando(false);
+    }
+  }
+
   const categoriasFiltradas = useMemo(() => {
     const termo = busca.trim().toLocaleLowerCase("pt-BR");
     return categorias.filter((categoria) => {
-      const correspondeBusca =
-        !termo ||
-        categoria.nome.toLocaleLowerCase("pt-BR").includes(termo) ||
-        categoria.slug.includes(termo) ||
-        categoria.descricao.toLocaleLowerCase("pt-BR").includes(termo);
-      const correspondeStatus =
-        filtroStatus === "Todas" || categoria.status === filtroStatus;
+      const correspondeBusca = !termo ||
+        (categoria.nome || "").toLocaleLowerCase("pt-BR").includes(termo) ||
+        (categoria.slug || "").toLocaleLowerCase("pt-BR").includes(termo) ||
+        (categoria.descricao || "").toLocaleLowerCase("pt-BR").includes(termo);
+      const correspondeStatus = filtroStatus === "Todas" || categoria.status === filtroStatus;
       return correspondeBusca && correspondeStatus;
     });
   }, [categorias, busca, filtroStatus]);
 
-  const totalProdutos = categorias.reduce((soma, categoria) => soma + categoria.produtos, 0);
+  const totalProdutos = categorias.reduce((soma, categoria) => soma + Number(categoria.produtos || 0), 0);
   const totalAtivas = categorias.filter((categoria) => categoria.status === "Ativa").length;
   const totalInativas = categorias.filter((categoria) => categoria.status === "Inativa").length;
 
   function abrirNovaCategoria() {
     setCategoriaEditando(null);
-    setForm(vazia);
+    setForm({ ...vazia });
     setErro("");
     setModalAberto(true);
   }
@@ -148,11 +156,13 @@ export default function AdminCategorias() {
   function abrirEdicao(categoria) {
     setCategoriaEditando(categoria);
     setForm({
-      nome: categoria.nome,
-      slug: categoria.slug,
-      descricao: categoria.descricao,
-      status: categoria.status,
-      cor: categoria.cor,
+      nome: categoria.nome || "",
+      slug: categoria.slug || "",
+      descricao: categoria.descricao || "",
+      imagemUrl: categoria.imagens?.[0]?.url || categoria.imagemUrl || "",
+      status: categoria.status || "Ativa",
+      imagem: null,
+      imagemPreview: categoria.imagemUrl || "",
     });
     setErro("");
     setModalAberto(true);
@@ -166,74 +176,96 @@ export default function AdminCategorias() {
     }));
   }
 
-  function salvarCategoria(event) {
+  function selecionarImagem(arquivo) {
+    if (!arquivo) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(arquivo.type)) {
+      setErro("Selecione uma imagem JPG, PNG ou WEBP.");
+      return;
+    }
+    if (arquivo.size > 5 * 1024 * 1024) {
+      setErro("A imagem deve ter no máximo 5 MB.");
+      return;
+    }
+    setErro("");
+    setForm((atual) => ({
+      ...atual,
+      imagem: arquivo,
+      imagemPreview: URL.createObjectURL(arquivo),
+    }));
+  }
+
+  async function salvarCategoria(event) {
     event.preventDefault();
     const nome = form.nome.trim();
     const slug = gerarSlug(form.slug);
-    if (!nome) {
-      setErro("Informe o nome da categoria.");
-      return;
-    }
-    if (!slug) {
-      setErro("Informe um slug válido.");
-      return;
-    }
-    const slugDuplicado = categorias.some(
-      (categoria) =>
-        categoria.slug === slug && categoria.id !== categoriaEditando?.id
+    if (!nome) return setErro("Informe o nome da categoria.");
+    if (!slug) return setErro("Informe um slug válido.");
+
+    const slugDuplicado = categorias.some((categoria) =>
+      categoria.slug === slug && categoria.id !== categoriaEditando?.id
     );
-    if (slugDuplicado) {
-      setErro("Já existe uma categoria com esse slug.");
-      return;
-    }
+    if (slugDuplicado) return setErro("Já existe uma categoria com esse slug.");
 
-    const dados = {
-      nome,
-      slug,
-      descricao: form.descricao.trim(),
-      status: form.status,
-      cor: form.cor,
-    };
+    const dados = new FormData();
+    dados.append("nome", nome);
+    dados.append("slug", slug);
+    dados.append("descricao", form.descricao.trim());
+    if (form.imagem) dados.append("imagem", form.imagem);
 
-    if (categoriaEditando) {
-      setCategorias((atuais) =>
-        atuais.map((categoria) =>
-          categoria.id === categoriaEditando.id
-            ? { ...categoria, ...dados }
-            : categoria
-        )
-      );
-    } else {
-      setCategorias((atuais) => [
-        ...atuais,
-        { id: Date.now(), ...dados, produtos: 0 },
-      ]);
+    try {
+      setSalvando(true);
+      setErro("");
+      if (categoriaEditando) {
+        await requisicao(`/categorias/${categoriaEditando.id}`, { method: "PATCH", body: dados });
+        setAviso("Categoria atualizada com sucesso.");
+      } else {
+        await requisicao("/categorias", { method: "POST", body: dados });
+        setAviso("Categoria cadastrada com sucesso.");
+      }
+      setModalAberto(false);
+      setCategoriaEditando(null);
+      await carregarCategorias();
+      window.setTimeout(() => setAviso(""), 3000);
+    } catch (error) {
+      setErro(error.message || "Não foi possível salvar a categoria.");
+    } finally {
+      setSalvando(false);
     }
-    setModalAberto(false);
   }
 
-  function alternarStatus(categoria) {
-    setCategorias((atuais) =>
-      atuais.map((item) =>
-        item.id === categoria.id
-          ? { ...item, status: item.status === "Ativa" ? "Inativa" : "Ativa" }
-          : item
-      )
-    );
+  async function alternarStatus(categoria) {
+    const ativo = categoria.status !== "Ativa";
+    if (!window.confirm(`Deseja ${ativo ? "ativar" : "desativar"} a categoria "${categoria.nome}"?`)) return;
+    try {
+      await requisicao(`/categorias/${categoria.id}/status`, {
+        method: "PATCH",
+        body: JSON.stringify({ ativo }),
+      });
+      setCategorias((atuais) => atuais.map((item) => item.id === categoria.id
+        ? { ...item, status: ativo ? "Ativa" : "Inativa" } : item));
+      setAviso(`Categoria ${ativo ? "ativada" : "desativada"} com sucesso.`);
+      window.setTimeout(() => setAviso(""), 3000);
+    } catch (error) {
+      setErroGeral(error.message || "Não foi possível alterar o status.");
+    }
   }
 
-  function excluirCategoria() {
+  async function excluirCategoria() {
     if (!categoriaExcluindo) return;
-    if (categoriaExcluindo.produtos > 0) {
-      setErroExclusao("Esta categoria possui produtos vinculados. Remova ou mova os produtos antes de excluí-la.");
+    if (Number(categoriaExcluindo.produtos || 0) > 0) {
+      setErroExclusao("Esta categoria possui produtos vinculados. Desvincule os produtos antes de excluí-la.");
       return;
     }
-    setCategorias((atuais) => atuais.filter((item) => item.id !== categoriaExcluindo.id));
-    setCategoriaExcluindo(null);
-    setErroExclusao("");
+    try {
+      await requisicao(`/categorias/delete/${categoriaExcluindo.id}`, { method: "DELETE" });
+      setCategorias((atuais) => atuais.filter((item) => item.id !== categoriaExcluindo.id));
+      setCategoriaExcluindo(null);
+      setAviso("Categoria excluída com sucesso.");
+      window.setTimeout(() => setAviso(""), 3000);
+    } catch (error) {
+      setErroExclusao(error.message || "Não foi possível excluir a categoria.");
+    }
   }
-
-  const [erroExclusao, setErroExclusao] = useState("");
 
   return (
     <div className="min-h-screen bg-[#F8F3E8] text-[#211C14]">
@@ -244,6 +276,8 @@ export default function AdminCategorias() {
           subtitle="Organize as categorias que ajudam seus clientes a encontrar as peças."
         />
         <div className="mx-auto max-w-[1500px] space-y-6 p-4 sm:p-6 lg:p-8">
+          {aviso && <div role="status" className="rounded-xl border border-[#D5E5D5] bg-[#EDF5ED] px-4 py-3 text-sm text-[#477254]">{aviso}</div>}
+          {erroGeral && <div role="alert" className="flex items-center justify-between gap-3 rounded-xl border border-[#EDC9BE] bg-[#FDF0EC] px-4 py-3 text-sm text-[#9B4A3C]"><span>{erroGeral}</span><button onClick={carregarCategorias} className="font-medium underline">Tentar novamente</button></div>}
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-sm text-[#817766]">Catálogo / Categorias</p>
@@ -299,7 +333,7 @@ export default function AdminCategorias() {
             </div>
 
             <div className="grid gap-3 p-4 md:hidden">
-              {categoriasFiltradas.map((categoria) => (
+              {!carregando && categoriasFiltradas.map((categoria) => (
                 <article key={categoria.id} className="rounded-xl border border-[#E9DCC4] p-4">
                   <div className="flex items-start gap-3">
                     <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-[#E9DCC4]" style={{ backgroundColor: categoria.cor }}>
@@ -322,7 +356,7 @@ export default function AdminCategorias() {
                   </div>
                 </article>
               ))}
-              {categoriasFiltradas.length === 0 && <EmptyState />}
+              {!carregando && categoriasFiltradas.length === 0 && <EmptyState />}
             </div>
 
             <div className="hidden overflow-x-auto md:block">
@@ -337,12 +371,24 @@ export default function AdminCategorias() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[#EFE5D5]">
-                  {categoriasFiltradas.map((categoria) => (
+                  {!carregando && categoriasFiltradas.map((categoria) => (
                     <tr key={categoria.id} className="transition hover:bg-[#FAF6EE]">
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-[#E9DCC4]" style={{ backgroundColor: categoria.cor }}>
-                            <Tags size={19} className="text-[#5B4A2D]" />
+                          <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[#E9DCC4] bg-[#FCFAF5]">
+                            {categoria.imagemUrl ? (
+                              <img
+                                src={categoria.imagemUrl}
+                                alt={categoria.nome}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <Tags
+                                size={19}
+                                className="text-[#5B4A2D]"
+                                aria-hidden="true"
+                              />
+                            )}
                           </span>
                           <div>
                             <p className="font-medium">{categoria.nome}</p>
@@ -362,7 +408,7 @@ export default function AdminCategorias() {
                       </td>
                     </tr>
                   ))}
-                  {categoriasFiltradas.length === 0 && (
+                  {!carregando && categoriasFiltradas.length === 0 && (
                     <tr><td colSpan={5} className="px-5 py-12"><EmptyState /></td></tr>
                   )}
                 </tbody>
@@ -370,7 +416,7 @@ export default function AdminCategorias() {
             </div>
           </section>
           <p className="text-xs leading-5 text-[#968B79]">
-            Observação: esta versão usa dados demonstrativos no estado do React. As alterações ainda não são salvas no Supabase.
+            As categorias e suas imagens são carregadas e salvas pela API da AURELIA.
           </p>
         </div>
       </main>
@@ -404,18 +450,29 @@ export default function AdminCategorias() {
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium">Cor de identificação</label>
-                <div className="flex items-center gap-3 rounded-xl border border-[#E9DCC4] bg-[#FCFAF5] p-2.5">
-                  <input type="color" value={form.cor} onChange={(event) => alterarCampo("cor", event.target.value)} className="h-9 w-10 cursor-pointer rounded border-0 bg-transparent" />
-                  <span className="text-sm text-[#817766]">{form.cor.toUpperCase()}</span>
-                  <span className="ml-auto h-7 w-7 rounded-lg border border-[#E9DCC4]" style={{ backgroundColor: form.cor }} />
-                </div>
+                <label className="mb-1.5 block text-sm font-medium">Imagem da categoria</label>
+                {form.imagemPreview && <img src={form.imagemPreview} alt="Prévia da categoria" className="mb-3 h-40 w-full rounded-xl border border-[#E9DCC4] object-cover" />}
+                <label className="flex cursor-pointer items-center justify-center gap-2 rounded-xl border border-dashed border-[#CDBB98] bg-[#F8F3E8] px-4 py-4 text-sm text-[#6F5A35] hover:bg-[#F1E9DC]">
+                  <ImageIcon size={17} />
+                  {form.imagem ? form.imagem.name : "Selecionar imagem (JPG, PNG ou WEBP)"}
+                  <input type="file" accept="image/jpeg,image/png,image/webp" className="sr-only" onChange={(event) => {
+                    const arquivo = event.target.files?.[0];
+                    if (!arquivo) return;
+                    if (!["image/jpeg", "image/png", "image/webp"].includes(arquivo.type) || arquivo.size > 5 * 1024 * 1024) {
+                      setErro("Selecione uma imagem JPG, PNG ou WEBP de até 5 MB.");
+                      return;
+                    }
+                    setErro("");
+                    setForm((atual) => ({ ...atual, imagem: arquivo, imagemPreview: URL.createObjectURL(arquivo) }));
+                  }} />
+                </label>
+                <p className="mt-1.5 text-xs text-[#968B79]">Máximo de 5 MB. Ao editar, não selecione outra imagem para manter a atual.</p>
               </div>
             </div>
             {erro && <p className="flex items-start gap-2 rounded-xl bg-[#F8EAE6] p-3 text-sm text-[#9B4A3C]"><AlertCircle size={17} className="mt-0.5 shrink-0" />{erro}</p>}
             <div className="flex flex-col-reverse gap-3 border-t border-[#E9DCC4] pt-4 sm:flex-row sm:justify-end">
               <button type="button" onClick={() => setModalAberto(false)} className="rounded-xl border border-[#E9DCC4] px-4 py-2.5 text-sm font-medium hover:bg-[#F1E9DC]">Cancelar</button>
-              <button type="submit" className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#211C14] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#3A3023]"><Check size={16} />{categoriaEditando ? "Salvar alterações" : "Criar categoria"}</button>
+              <button type="submit" disabled={salvando} className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#211C14] px-5 py-2.5 text-sm font-medium text-white hover:bg-[#3A3023] disabled:cursor-not-allowed disabled:opacity-60"><Check size={16} />{salvando ? "Salvando..." : categoriaEditando ? "Salvar alterações" : "Criar categoria"}</button>
             </div>
           </form>
         </Modal>

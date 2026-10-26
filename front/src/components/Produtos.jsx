@@ -1,72 +1,118 @@
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   Heart,
   ShoppingBag,
   Star,
 } from "lucide-react";
 
+const API_URL = import.meta.env.VITE_API_URL;
+
+async function requisicao(endpoint, opcoes = {}) {
+  if (!API_URL) {
+    throw new Error(
+      "A variável VITE_API_URL não está configurada no arquivo .env do frontend."
+    );
+  }
+
+  const token = sessionStorage.getItem("aurora_token");
+
+  const resposta = await fetch(`${API_URL}${endpoint}`, {
+    ...opcoes,
+    headers: {
+      ...(opcoes.body ? { "Content-Type": "application/json" } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...opcoes.headers,
+    },
+  });
+
+  const resultado =
+    resposta.status === 204
+      ? {}
+      : await resposta.json().catch(() => ({}));
+
+  if (!resposta.ok) {
+    throw new Error(
+      resultado.mensagem ||
+        resultado.message ||
+        `Erro na requisição (${resposta.status}).`
+    );
+  }
+
+  return resultado;
+}
+
 const filtros = ["Todos", "Ouro", "Pérolas", "Zircônias"];
 
-const produtos = [
-  {
-    id: 1,
-    marca: "ATELIER LUME",
-    nome: "Colar Elo Orgânico banhado",
-    categoria: "Ouro",
-    preco: 229,
-    precoAntigo: 319,
-    desconto: "-28%",
-    imagem: "/assets/images/colar-elo.png",
-    avaliacoes: 842,
-  },
-  {
-    id: 2,
-    marca: "CASA SERENA",
-    nome: "Brinco Gota Madrepérola",
-    categoria: "Pérolas",
-    preco: 149,
-    precoAntigo: null,
-    desconto: "Novo",
-    imagem: "/assets/images/brinco-gota.png",
-    avaliacoes: 842,
-  },
-  {
-    id: 3,
-    marca: "OURIVES LÚMEN",
-    nome: "Anel Trançado Dourado",
-    categoria: "Ouro",
-    preco: 189,
-    precoAntigo: 240,
-    desconto: "-21%",
-    imagem: "/assets/images/anel-trancado.png",
-    avaliacoes: 842,
-  },
-  {
-    id: 4,
-    marca: "ATELIER LUME",
-    nome: "Pulseira Riviera Zircônias",
-    categoria: "Zircônias",
-    preco: 269,
-    precoAntigo: null,
-    desconto: "Best-seller",
-    imagem: "/assets/images/pulseira-riviera.png",
-    avaliacoes: 842,
-  },
-];
 
 function formatarPreco(valor) {
-  return valor.toLocaleString("pt-BR", {
+  const preco = Number(valor);
+
+  if (!Number.isFinite(preco)) {
+    return "R$ 0,00";
+  }
+
+  return preco.toLocaleString("pt-BR", {
     style: "currency",
     currency: "BRL",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
 }
 
+
+function normalizarProduto(produto) {
+  return {
+    ...produto,
+    ativo: produto.ativo !== false,
+    descricao: produto.descricao || "",
+    produtos:
+      produto._count?.produtos ??
+      produto.produtos?.length ??
+      (typeof produto.produtos === "number" ? produto.produtos : 0),
+  };
+}
+
 export default function Produtos() {
+  const [produtos, setProdutos] = useState([]);
   const [filtroAtivo, setFiltroAtivo] = useState("Todos");
   const [favoritos, setFavoritos] = useState([]);
   const [sacola, setSacola] = useState([]);
+
+    const [erroGeral, setErroGeral] = useState("");
+
+   const [carregando, setCarregando] = useState(true);
+
+  const carregarProdutos = useCallback(async () => {
+    try{
+      setCarregando(true);
+      setErroGeral("");
+
+      const resultado = await requisicao("/produtos");
+
+      const lista = Array.isArray(resultado)
+        ? resultado
+        : resultado.produtos;
+
+      if (!Array.isArray(lista)) {
+        throw new Error(
+          "A API não retornou uma lista de produtos"
+        );
+      }
+
+      setProdutos(lista.map(normalizarProduto));
+    } catch (error) {
+      setErroGeral(
+        error.message || "não foi possivel carregar os produtos."
+      );
+    } finally {
+      setCarregando(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    carregarProdutos();
+  }, [carregarProdutos]);
 
   const produtosFiltrados =
     filtroAtivo === "Todos"

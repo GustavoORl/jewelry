@@ -2,35 +2,20 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import {
-
   ArrowRight,
-
   ShoppingBag,
-
   Store,
-
   UserRound,
-
   Mail,
-
   LockKeyhole,
-
   IdCard,
-
   ShieldCheck,
-
   Truck,
-
   Headset,
-
   Gift,
-
   CheckCircle2,
-
   Eye,
-
   EyeOff,
-
 } from "lucide-react";
 
 import { FaGoogle, FaApple, FaFacebook} from "react-icons/fa";
@@ -76,8 +61,8 @@ export default function Login() {
 
     try {
       const endpoint = isCadastro
-        ? `${API_URL}/api/usuarios`
-        : `${API_URL}/api/auth/login`;
+        ? `${API_URL}usuarios`
+        : `${API_URL}/auth/login`;
 
       const dados = isCadastro
         ? { nome, email, senha, cpfCnpj: documento || undefined }

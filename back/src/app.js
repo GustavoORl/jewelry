@@ -5,6 +5,7 @@ import cors from "cors";
 import usuarioRoutes from "./routes/usuarioRoutes.js";
 import produtoRoutes from "./routes/produtoRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
+import categoriaRoutes from "./routes/categoriaRoutes.js";
 
 const app = express();
 
@@ -24,5 +25,6 @@ app.get("/api/health", (req, res) => {
 app.use("/api/usuarios", usuarioRoutes);
 app.use("/api/produtos", produtoRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/categorias", categoriaRoutes);
 
 export default app;
