@@ -17,6 +17,8 @@ import {
 import Sidebar from "../../components/admin/Sidebar.jsx";
 import AdminHeader from "../../components/admin/AdminHeader.jsx";
 
+import { apiFetch } from "../../services/api.js";
+
 const API_URL = import.meta.env.VITE_API_URL;
 
 const vazia = {
@@ -41,22 +43,6 @@ function gerarSlug(valor) {
     .replace(/^-+|-+$/g, "");
 }
 
-async function requisicao(endpoint, opcoes = {}) {
-  if (!API_URL) throw new Error("Configure VITE_API_URL no .env do frontend.");
-  const token = sessionStorage.getItem("aurora_token");
-  const ehFormData = typeof FormData !== "undefined" && opcoes.body instanceof FormData;
-  const resposta = await fetch(`${API_URL}${endpoint}`, {
-    ...opcoes,
-    headers: {
-      ...(opcoes.body && !ehFormData ? { "Content-Type": "application/json" } : {}),
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...opcoes.headers,
-    },
-  });
-  const resultado = resposta.status === 204 ? {} : await resposta.json().catch(() => ({}));
-  if (!resposta.ok) throw new Error(resultado.mensagem || resultado.message || `Erro na requisição (${resposta.status}).`);
-  return resultado;
-}
 
 function normalizarCategoria(categoria) {
   return {
@@ -119,7 +105,7 @@ export default function AdminCategorias() {
     try {
       setCarregando(true);
       setErroGeral("");
-      const resultado = await requisicao("/categorias");
+      const resultado = await apiFetch("/admin/categorias");
       const lista = Array.isArray(resultado) ? resultado : resultado.categorias;
       if (!Array.isArray(lista)) throw new Error("A API não retornou uma lista de categorias.");
       setCategorias(lista.map(normalizarCategoria));
@@ -216,10 +202,10 @@ export default function AdminCategorias() {
       setSalvando(true);
       setErro("");
       if (categoriaEditando) {
-        await requisicao(`/categorias/${categoriaEditando.id}`, { method: "PATCH", body: dados });
+        await apiFetch(`/admin/categorias/${categoriaEditando.id}`, { method: "PATCH", body: dados });
         setAviso("Categoria atualizada com sucesso.");
       } else {
-        await requisicao("/categorias", { method: "POST", body: dados });
+        await apiFetch("/admin/categorias", { method: "POST", body: dados });
         setAviso("Categoria cadastrada com sucesso.");
       }
       setModalAberto(false);
@@ -237,7 +223,7 @@ export default function AdminCategorias() {
     const ativo = categoria.status !== "Ativa";
     if (!window.confirm(`Deseja ${ativo ? "ativar" : "desativar"} a categoria "${categoria.nome}"?`)) return;
     try {
-      await requisicao(`/categorias/${categoria.id}/status`, {
+      await apiFetch(`/admin/categorias/${categoria.id}/status`, {
         method: "PATCH",
         body: JSON.stringify({ ativo }),
       });
@@ -257,7 +243,7 @@ export default function AdminCategorias() {
       return;
     }
     try {
-      await requisicao(`/categorias/delete/${categoriaExcluindo.id}`, { method: "DELETE" });
+      await apiFetch(`/admin/categorias/${categoriaExcluindo.id}`, { method: "DELETE" });
       setCategorias((atuais) => atuais.filter((item) => item.id !== categoriaExcluindo.id));
       setCategoriaExcluindo(null);
       setAviso("Categoria excluída com sucesso.");

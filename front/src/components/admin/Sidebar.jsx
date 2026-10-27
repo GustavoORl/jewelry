@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   X,
   Gem,
+  Store,
 } from "lucide-react";
 
 const navigation = [
@@ -19,6 +20,7 @@ const navigation = [
   { label: "Clientes", icon: Users, to: "/admin/clientes" },
   { label: "Categorias", icon: Tags, to: "/admin/categorias" },
   { label: "Materiais", icon: Gem, to: "/admin/materiais"},
+  { label: "Ir para Loja", icon: Store, to: "/"},
 ];
 
 export default function Sidebar({ mobileOpen, onClose }) {

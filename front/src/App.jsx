@@ -1,9 +1,12 @@
-
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
+import { AuthProvider } from "./contexts/AuthContext.jsx";
 import Layout from "./layout/Layout.jsx";
 import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
+import ListagemProdutos from "./pages/ListagemProdutos.jsx";
+
+import RotaProtegida from "./components/RotaProtegida.jsx";
 
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AdminProdutos from "./pages/admin/AdminProdutos.jsx";
@@ -15,28 +18,58 @@ import AdminMateriais from "./pages/admin/AdminMateriais.jsx";
 export default function App() {
   return (
     <BrowserRouter>
-      <Routes>
-        {/* Loja pública */}
-        <Route element={<Layout />}>
-          <Route path="/" element={<Home />} />
-        </Route>
+      <AuthProvider>
+        <Routes>
+          {/* Loja pública */}
+          <Route element={<Layout />}>
+            <Route path="/" element={<Home />} />
+            <Route
+              path="/produtos"
+              element={<ListagemProdutos />}
+            />
+          </Route>
 
-        {/* Login */}
-        <Route path="/login" element={<Login />} />
+          {/* Login */}
+          <Route path="/login" element={<Login />} />
 
-        {/* Área administrativa protegida */}
-        <Route
-          path="/admin"
-         
-        >
-          <Route index element={<AdminDashboard />} />
-          <Route path="produtos" element={<AdminProdutos />} />
-          <Route path="pedidos" element={<AdminPedidos />} />
-          <Route path="clientes" element={<AdminClientes />} />
-          <Route path="categorias" element={<AdminCategorias />} />
-          <Route path="/admin/materiais" element={<AdminMateriais />} />
-        </Route>
-      </Routes>
+          {/* Área administrativa protegida */}
+          <Route
+            element={<RotaProtegida tiposPermitidos={["ADMIN"]} />}
+          >
+            <Route path="/admin">
+              <Route
+                index
+                element={<AdminDashboard />}
+              />
+
+              <Route
+                path="produtos"
+                element={<AdminProdutos />}
+              />
+
+              <Route
+                path="pedidos"
+                element={<AdminPedidos />}
+              />
+
+              <Route
+                path="clientes"
+                element={<AdminClientes />}
+              />
+
+              <Route
+                path="categorias"
+                element={<AdminCategorias />}
+              />
+
+              <Route
+                path="materiais"
+                element={<AdminMateriais />}
+              />
+            </Route>
+          </Route>
+        </Routes>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

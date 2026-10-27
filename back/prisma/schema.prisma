@@ -1,11 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
-
-
-
-
 generator client {
   provider = "prisma-client"
   output   = "../generated/prisma"
@@ -13,20 +5,6 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-}
-
-enum TipoUsuario {
-  CLIENTE
-  ADMINISTRADOR
-}
-
-enum StatusPedido {
-  PENDENTE
-  PAGO
-  EM_PREPARACAO
-  ENVIADO
-  ENTREGUE
-  CANCELADO
 }
 
 model Usuario {
@@ -40,10 +18,10 @@ model Usuario {
   ativo        Boolean     @default(true)
   criadoEm     DateTime    @default(now())
   atualizadoEm DateTime    @updatedAt
-
-  enderecos Endereco[]
-  carrinho  Carrinho?
-  pedidos   Pedido[]
+  carrinho     Carrinho?
+  enderecos    Endereco[]
+  pedidos      Pedido[]
+  sessoesRefreshToken SessaoRefreshToken[]
 }
 
 model Endereco {
@@ -60,55 +38,50 @@ model Endereco {
   principal    Boolean  @default(false)
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
-
-  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId])
 }
 
 model Categoria {
-  id           String   @id @default(cuid())
+  id           String            @id @default(cuid())
   nome         String
-  slug         String   @unique
+  slug         String            @unique
   descricao    String?
-  ativo       Boolean  @default(true)
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-
-  produtos Produto[]
-  imagens ImagemCategoria[]
+  criadoEm     DateTime          @default(now())
+  atualizadoEm DateTime          @updatedAt
+  ativo        Boolean           @default(true)
+  imagens      ImagemCategoria[]
+  produtos     Produto[]
 }
 
 model ImagemCategoria {
-  id              String   @id @default(cuid())
-  categoriaId     String
-  url             String
+  id               String    @id @default(cuid())
+  categoriaId      String
+  url              String
   textoAlternativo String?
-  posicao         Int      @default(0)
-  criadoEm        DateTime @default(now())
-
-  categoria Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+  criadoEm         DateTime  @default(now())
+  posicao          Int       @default(0)
+  categoria        Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
 
   @@index([categoriaId])
 }
 
-
 model Produto {
-  id           String   @id @default(cuid())
-  categoriaId  String
-  nome         String
-  slug         String   @unique
-  descricao    String
-  preco        Decimal  @db.Decimal(10, 2)
-  estoque      Int      @default(0)
-  ativo        Boolean  @default(true)
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-
-  categoria     Categoria         @relation(fields: [categoriaId], references: [id], onDelete: Restrict)
+  id            String            @id @default(cuid())
+  categoriaId   String
+  nome          String
+  slug          String            @unique
+  descricao     String
+  preco         Decimal           @db.Decimal(10, 2)
+  estoque       Int               @default(0)
+  ativo         Boolean           @default(true)
+  criadoEm      DateTime          @default(now())
+  atualizadoEm  DateTime          @updatedAt
   imagens       ImagemProduto[]
   itensCarrinho ItemCarrinho[]
   itensPedido   ItemPedido[]
+  categoria     Categoria         @relation(fields: [categoriaId], references: [id])
   materiais     ProdutoMaterial[]
 
   @@index([categoriaId])
@@ -124,14 +97,12 @@ model Material {
 model ProdutoMaterial {
   produtoId  String
   materialId Int
-
-  produto  Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
-  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+  material   Material @relation(fields: [materialId], references: [id])
+  produto    Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
 
   @@id([produtoId, materialId])
   @@index([materialId])
 }
-
 
 model ImagemProduto {
   id               String   @id @default(cuid())
@@ -140,20 +111,18 @@ model ImagemProduto {
   textoAlternativo String?
   posicao          Int      @default(0)
   criadoEm         DateTime @default(now())
-
-  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  produto          Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
 
   @@index([produtoId])
 }
 
 model Carrinho {
-  id           String   @id @default(cuid())
-  usuarioId    String   @unique
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-
-  usuario Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  itens   ItemCarrinho[]
+  id           String         @id @default(cuid())
+  usuarioId    String         @unique
+  criadoEm     DateTime       @default(now())
+  atualizadoEm DateTime       @updatedAt
+  usuario      Usuario        @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  itens        ItemCarrinho[]
 }
 
 model ItemCarrinho {
@@ -163,32 +132,30 @@ model ItemCarrinho {
   quantidade   Int      @default(1)
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
-
-  carrinho Carrinho @relation(fields: [carrinhoId], references: [id], onDelete: Cascade)
-  produto  Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  carrinho     Carrinho @relation(fields: [carrinhoId], references: [id], onDelete: Cascade)
+  produto      Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
 
   @@unique([carrinhoId, produtoId])
   @@index([produtoId])
 }
 
 model Pedido {
-  id                   String       @id @default(cuid())
-  usuarioId            String
-  status               StatusPedido @default(PENDENTE)
-  valorTotal           Decimal      @db.Decimal(10, 2)
-  destinatario         String
-  cepEntrega           String
-  ruaEntrega           String
-  numeroEntrega        String
-  complementoEntrega   String?
-  bairroEntrega        String
-  cidadeEntrega        String
-  estadoEntrega        String
-  criadoEm             DateTime     @default(now())
-  atualizadoEm         DateTime     @updatedAt
-
-  usuario Usuario      @relation(fields: [usuarioId], references: [id], onDelete: Restrict)
-  itens   ItemPedido[]
+  id                 String       @id @default(cuid())
+  usuarioId          String
+  status             StatusPedido @default(PENDENTE)
+  valorTotal         Decimal      @db.Decimal(10, 2)
+  destinatario       String
+  cepEntrega         String
+  ruaEntrega         String
+  numeroEntrega      String
+  complementoEntrega String?
+  bairroEntrega      String
+  cidadeEntrega      String
+  estadoEntrega      String
+  criadoEm           DateTime     @default(now())
+  atualizadoEm       DateTime     @updatedAt
+  itens              ItemPedido[]
+  usuario            Usuario      @relation(fields: [usuarioId], references: [id])
 
   @@index([usuarioId])
   @@index([status])
@@ -202,9 +169,36 @@ model ItemPedido {
   nomeProduto   String
   quantidade    Int
   precoUnitario Decimal @db.Decimal(10, 2)
-
-  pedido  Pedido  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
-  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Restrict)
+  pedido        Pedido  @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
+  produto       Produto @relation(fields: [produtoId], references: [id])
 
   @@index([produtoId])
+}
+
+enum TipoUsuario {
+  CLIENTE
+  ADMIN
+}
+
+enum StatusPedido {
+  PENDENTE
+  PAGO
+  EM_PREPARACAO
+  ENVIADO
+  ENTREGUE
+  CANCELADO
+}
+
+model SessaoRefreshToken {
+  id          String   @id @default(cuid())
+  usuarioId   String
+  tokenHash   String   @unique
+  expiraEm    DateTime
+  revogadoEm  DateTime?
+  criadoEm    DateTime @default(now())
+  
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([expiraEm])
 }

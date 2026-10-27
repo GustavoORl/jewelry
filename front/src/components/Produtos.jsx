@@ -50,8 +50,8 @@ async function requisicao(endpoint, opcoes = {}) {
   if (!resposta.ok) {
     throw new Error(
       resultado.mensagem ||
-        resultado.message ||
-        `Erro na requisição (${resposta.status}).`
+      resultado.message ||
+      `Erro na requisição (${resposta.status}).`
     );
   }
 
@@ -108,8 +108,8 @@ function normalizarProduto(produto) {
 
   const materiaisProduto = Array.isArray(produto.materiais)
     ? produto.materiais
-        .map((item) => item.material || item)
-        .filter((material) => material?.nome)
+      .map((item) => item.material || item)
+      .filter((material) => material?.nome)
     : [];
 
   return {
@@ -164,8 +164,8 @@ export default function Produtos() {
       const listaMateriais = Array.isArray(resultadoMateriais)
         ? resultadoMateriais
         : resultadoMateriais.materiais ||
-          resultadoMateriais.dados ||
-          [];
+        resultadoMateriais.dados ||
+        [];
 
       setMateriais(
         listaMateriais.filter((material) => material.ativo !== false)
@@ -201,16 +201,16 @@ export default function Produtos() {
   }, [carregarProdutos]);
 
   // Evita filtros duplicados.
-const filtrosVisiveis = [
-  ...filtrosPrincipais,
-].filter(
-  (filtro, indice, lista) =>
-    lista.findIndex(
-      (item) =>
-        normalizarNomeMaterial(item) ===
-        normalizarNomeMaterial(filtro)
-    ) === indice
-);
+  const filtrosVisiveis = [
+    ...filtrosPrincipais,
+  ].filter(
+    (filtro, indice, lista) =>
+      lista.findIndex(
+        (item) =>
+          normalizarNomeMaterial(item) ===
+          normalizarNomeMaterial(filtro)
+      ) === indice
+  );
 
 
   // Filtra os produtos pelos materiais associados.
@@ -218,12 +218,12 @@ const filtrosVisiveis = [
     normalizarNomeMaterial(filtroAtivo) === "todos"
       ? produtosDestaque
       : produtos.filter((produto) =>
-          produto.materiais.some(
-            (material) =>
-              normalizarNomeMaterial(material.nome) ===
-              normalizarNomeMaterial(filtroAtivo)
-          )
+        produto.materiais.some(
+          (material) =>
+            normalizarNomeMaterial(material.nome) ===
+            normalizarNomeMaterial(filtroAtivo)
         )
+      )
   ).slice(0, 4);
 
   function alternarFavorito(id) {
@@ -265,11 +265,10 @@ const filtrosVisiveis = [
                   type="button"
                   onClick={() => setFiltroAtivo(filtro)}
                   aria-pressed={ativo}
-                  className={`rounded-full border px-4 py-2 text-xs transition-all duration-300 ${
-                    ativo
+                  className={`rounded-full border px-4 py-2 text-xs transition-all duration-300 ${ativo
                       ? "border-[#211C14] bg-[#211C14] text-white"
                       : "border-[#E8DDCA] bg-transparent hover:border-[#B9975B] hover:bg-[#F3EFE3]"
-                  }`}
+                    }`}
                 >
                   {filtro}
                 </button>
@@ -383,11 +382,10 @@ const filtrosVisiveis = [
                               : "Adicionar aos favoritos"
                           }
                           aria-pressed={favorito}
-                          className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border bg-white/95 transition-all duration-300 ${
-                            favorito
+                          className={`absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full border bg-white/95 transition-all duration-300 ${favorito
                               ? "border-[#B9975B] text-[#A47B43]"
                               : "border-[#E8DDCA] hover:border-[#B9975B]"
-                          }`}
+                            }`}
                         >
                           <Heart
                             size={18}
@@ -458,21 +456,6 @@ const filtrosVisiveis = [
                 })}
               </div>
             )}
-
-            {/* Novo botão: direciona para a página de catálogo */}
-            <div className="mt-10 flex justify-center">
-              <Link
-                to="/produtos"
-                className="group inline-flex items-center gap-3 border border-[#968052] px-7 py-3 text-sm font-medium text-[#968052] transition-all duration-300 hover:bg-[#968052] hover:text-white"
-              >
-                Ver todos os produtos
-
-                <ArrowRight
-                  size={16}
-                  className="transition-transform duration-300 group-hover:translate-x-1"
-                />
-              </Link>
-            </div>
           </>
         )}
 

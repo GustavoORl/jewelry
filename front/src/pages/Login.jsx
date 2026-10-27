@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 
+import { apiFetch } from "../services/api.js";
+import { useAuth } from "../contexts/AuthContext.jsx";
+
 import {
   ArrowRight,
   ShoppingBag,
@@ -33,77 +36,105 @@ export default function Login() {
   const [erro, setErro] = useState("");
   const [sucesso, setSucesso] = useState("");
   const navigate = useNavigate();
+  const { entrar } = useAuth();
 
   const isCadastro = modo === "cadastro";
 
-  async function handleSubmit(e) {
-    e.preventDefault();
-    const formulario = e.currentTarget;
+  
 
-    setErro("");
-    setSucesso("");
+async function handleSubmit(e) {
+  e.preventDefault();
 
-    if (carregando) return;
+  console.log("1. handleSubmit executado");
+  console.log("2. Modo cadastro:", isCadastro);
 
-    if (isCadastro && !aceitouTermos) {
-      setErro("Você precisa aceitar os termos para continuar.");
+  const formulario = e.currentTarget;
+
+  setErro("");
+  setSucesso("");
+
+  if (carregando) {
+    console.log(
+      "Envio interrompido: já existe uma requisição em andamento."
+    );
+    return;
+  }
+
+  if (isCadastro && !aceitouTermos) {
+    setErro("Você precisa aceitar os termos para continuar.");
+    return;
+  }
+
+  const campos = new FormData(formulario);
+
+  const nome = campos.get("nome")?.toString().trim();
+  const documento = campos.get("documento")?.toString().trim();
+  const email = campos.get("email")?.toString().trim();
+  const senha = campos.get("senha")?.toString();
+
+  setCarregando(true);
+
+  try {
+    console.log("3. Entrando no try. Cadastro:", isCadastro);
+
+    if (isCadastro) {
+      console.log("4. Chamando endpoint /usuarios");
+
+      await apiFetch("/usuarios", {
+        method: "POST",
+        body: JSON.stringify({
+          nome,
+          email,
+          senha,
+          cpfCnpj: documento || undefined,
+        }),
+      });
+
+      console.log("5. Cadastro realizado com sucesso");
+
+      setModo("login");
+      setSucesso("Conta criada! Entre com seu email e senha.");
+
+      formulario.reset();
+      setAceitouTermos(false);
+
       return;
     }
 
-    const campos = new FormData(formulario);
-    const nome = campos.get("nome")?.toString().trim();
-    const documento = campos.get("documento")?.toString().trim();
-    const email = campos.get("email")?.toString().trim();
-    const senha = campos.get("senha")?.toString();
+    console.log("4. Chamando endpoint /entrar");
 
-    const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-    setCarregando(true);
+    const resultado = await apiFetch("/entrar", {
+      method: "POST",
+      body: JSON.stringify({
+        email,
+        senha,
+      }),
+    });
 
-    try {
-      const endpoint = isCadastro
-        ? `${API_URL}usuarios`
-        : `${API_URL}/auth/login`;
+    console.log("5. Resposta do login:", resultado);
 
-      const dados = isCadastro
-        ? { nome, email, senha, cpfCnpj: documento || undefined }
-        : { email, senha };
+    // Atualiza o usuário no AuthContext.
+    entrar(resultado.usuario);
 
-      const resposta = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(dados),
-      });
+    setSucesso("Login realizado com sucesso!");
 
-      const resultado = await resposta.json();
+    // A sessão é mantida pelos cookies HttpOnly.
+    // Não armazenamos tokens no localStorage ou sessionStorage.
 
-      if (!resposta.ok) {
-        throw new Error(resultado.mensagem || "Não foi possível concluir a operação.");
-      }
+    navigate("/");
+  } catch (erroApi) {
+    console.error("Erro na autenticação:", erroApi);
 
-      if (isCadastro) {
-        setModo("login");
-        setSucesso("Conta criada! Entre com seu email e senha.");
-        formulario.reset();
-        setAceitouTermos(false);
-        return;
-      }
-
-      // Armazenamento temporário para desenvolvimento.
-      // Para produção, prefira uma sessão com cookie HttpOnly.
-      sessionStorage.setItem("aurora_token", resultado.token);
-      sessionStorage.setItem("aurora_usuario", JSON.stringify(resultado.usuario));
-
-      setSucesso("Login realizado com sucesso!");
-      navigate("/");
-    } catch (erroApi) {
-      setErro(
-        erroApi.message ||
-          "Não foi possível conectar ao servidor. Tente novamente."
-      );
-    } finally {
-      setCarregando(false);
-    }
+    setErro(
+      erroApi.message ||
+        "Não foi possível conectar ao servidor. Tente novamente."
+    );
+  } finally {
+    setCarregando(false);
   }
+}
+
+
 
   return (
 

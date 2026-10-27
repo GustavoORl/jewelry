@@ -1,32 +1,50 @@
 
 import express from "express";
 import cors from "cors";
+import cookieParser from "cookie-parser";
 
-import usuarioRoutes from "./routes/usuarioRoutes.js";
-import produtoRoutes from "./routes/produtoRoutes.js";
-import authRoutes from "./routes/authRoutes.js";
-import categoriaRoutes from "./routes/categoriaRoutes.js";
-import materialRoutes from "./routes/materialRoutes.js"
+import authRoutes from "./routes/public/authRoutes.js";
+
+import produtoPublicoRoutes from "./routes/public/produtoRoutes.js";
+import categoriaPublicaRoutes from "./routes/public/categoriaRoutes.js";
+import materialPublicoRoutes from "./routes/public/materialRoutes.js";
+
+import adminRoutes from "./routes/admin/index.js";
 
 const app = express();
 
-app.use(cors({
-  origin: "http://localhost:5173",
-}));
+
+const origensPermitidas = [
+  "http://localhost:5173",
+  "http://127.0.0.1:5173",
+  "http://192.168.100.64:5173",
+];
+
+app.use(
+  cors({
+    origin: origensPermitidas,
+    credentials: true,
+  })
+);
+
 
 app.use(express.json());
+app.use(cookieParser());
 
-app.get("/api/health", (req, res) => {
+app.get("/health", (req, res) => {
   res.status(200).json({
     sucesso: true,
-    mensagem: "API da AURELIA funcionando!",
+    mensagem: "API da AURORA funcionando!",
   });
 });
 
-app.use("/api/usuarios", usuarioRoutes);
-app.use("/api/produtos", produtoRoutes);
-app.use("/api/auth", authRoutes);
-app.use("/api/categorias", categoriaRoutes);
-app.use("/api/materiais", materialRoutes);
+// Rotas públicas
+app.use("/", authRoutes);
+app.use("/produtos", produtoPublicoRoutes);
+app.use("/categorias", categoriaPublicaRoutes);
+app.use("/materiais", materialPublicoRoutes);
+
+// Rotas administrativas
+app.use("/admin", adminRoutes);
 
 export default app;
