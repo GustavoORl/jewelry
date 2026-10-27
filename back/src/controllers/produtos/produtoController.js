@@ -1,5 +1,5 @@
 
-import { Prisma } from "../../../generated/prisma/client.js";
+import { Prisma } from "@prisma/client";
 import { ZodError } from "zod";
 import {
   criarProduto,

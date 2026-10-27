@@ -9,7 +9,7 @@ const tiposPermitidos = [
 export const uploadImagem = multer({
   storage: multer.memoryStorage(),
   limits: {
-    fileSize: 5 * 1024 * 1024,
+    fileSize: 4 * 1024 * 1024,
     files: 1,
   },
   fileFilter: (req, arquivo, callback) => {

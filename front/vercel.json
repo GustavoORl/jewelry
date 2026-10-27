@@ -1,0 +1,6 @@
+ {
+    "rewrites": [
+      { "source": "/api/:path*", "destination": "https://aurora-back-nine.vercel.app/:path*" },
+      { "source": "/(.*)", "destination": "/index.html" }
+    ]
+  }
