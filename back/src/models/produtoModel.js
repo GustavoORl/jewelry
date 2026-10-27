@@ -8,6 +8,11 @@ const incluirDetalhesProduto = {
       posicao: "asc",
     },
   },
+  materiais: {
+    include: {
+      material: true,
+    },
+  },
 };
 
 export async function criarProdutoModel(dados) {
@@ -16,9 +21,18 @@ export async function criarProdutoModel(dados) {
       categoriaId: dados.categoriaId,
       nome: dados.nome,
       slug: dados.slug,
-      descricao: dados.descricao ?? null,
+      descricao: dados.descricao ?? "",
       preco: dados.preco,
       estoque: dados.estoque,
+      materiais: dados.materialIds?.length
+        ? {
+            create: dados.materialIds.map((materialId) => ({
+              material: {
+                connect: { id: materialId },
+              },
+            })),
+          }
+        : undefined,
     },
     include: incluirDetalhesProduto,
   });
@@ -27,7 +41,7 @@ export async function criarProdutoModel(dados) {
 export async function listarProdutosModel() {
   return prisma.produto.findMany({
     where: {
-        ativo: true,
+      ativo: true,
     },
     include: incluirDetalhesProduto,
     orderBy: {
@@ -43,10 +57,11 @@ export async function buscarProdutoPorIdModel(id) {
   });
 }
 
-export async function excluirProdutoModel(id){
-    return prisma.produto.delete({where: {id}});
+export async function excluirProdutoModel(id) {
+  return prisma.produto.delete({
+    where: { id },
+  });
 }
-
 
 export async function atualizarProdutoModel(produto, id) {
   return prisma.produto.update({
@@ -57,13 +72,13 @@ export async function atualizarProdutoModel(produto, id) {
 }
 
 export async function atualizarStatusProdutoModel(id, ativo) {
-    return prisma.produto.update({
-        where: { id },
-        data: { ativo },
-        select: {
-            id: true,
-            nome: true,
-            ativo: true,
-        },
-    });
+  return prisma.produto.update({
+    where: { id },
+    data: { ativo },
+    select: {
+      id: true,
+      nome: true,
+      ativo: true,
+    },
+  });
 }

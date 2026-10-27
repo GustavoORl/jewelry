@@ -1,3 +1,4 @@
+
 import { z } from "zod";
 import { enviarImagem, excluirImagem } from "./imagemService.js";
 import { prisma } from "../config/prisma.js";
@@ -9,24 +10,6 @@ import {
   atualizarStatusProdutoModel,
 } from "../models/produtoModel.js";
 
-const esquemaProduto = z.object({
-  categoriaId: z.string().trim().min(1),
-  nome: z.string().trim().min(2).max(150),
-  slug: z.string().trim().min(2).max(180),
-  descricao: z.string().trim().optional(),
-  preco: z.coerce.number().positive(),
-  estoque: z.coerce.number().int().min(0),
-});
-
-const esquemaAtualizacaoProduto = z.object({
-  categoriaId: z.string().trim().min(1).optional(),
-  nome: z.string().trim().min(2).max(150).optional(),
-  slug: z.string().trim().min(2).max(180).optional(),
-  descricao: z.string().trim().optional(),
-  preco: z.coerce.number().positive().optional(),
-  estoque: z.coerce.number().int().min(0).optional(),
-}).strict();
-
 const incluirDetalhesProduto = {
   categoria: true,
   imagens: {
@@ -34,12 +17,71 @@ const incluirDetalhesProduto = {
       posicao: "asc",
     },
   },
+  materiais: {
+    include: {
+      material: true,
+    },
+  },
 };
 
-function extrairCaminhoImagem(urlImagem) {
-  if (!urlImagem) {
-    return null;
+// Aceita materialIds como array ou como JSON recebido via FormData.
+function normalizarMaterialIds(valor) {
+  if (valor === undefined) return [];
+
+  if (typeof valor === "string") {
+    try {
+      valor = JSON.parse(valor);
+    } catch {
+      throw new Error(
+        "O campo materialIds deve conter um array válido de IDs."
+      );
+    }
   }
+
+  if (!Array.isArray(valor)) {
+    throw new Error("O campo materialIds deve ser um array.");
+  }
+
+  return valor;
+}
+
+const esquemaMaterialIds = z
+  .array(z.coerce.number().int().positive())
+  .refine(
+    (ids) => new Set(ids).size === ids.length,
+    "Não informe materiais duplicados."
+  );
+
+const esquemaProduto = z.object({
+  categoriaId: z.string().trim().min(1),
+  nome: z.string().trim().min(2).max(150),
+  slug: z.string().trim().min(2).max(180),
+  descricao: z.string().trim().optional(),
+  preco: z.coerce.number().positive(),
+  estoque: z.coerce.number().int().min(0),
+  materialIds: z.preprocess(
+    normalizarMaterialIds,
+    esquemaMaterialIds
+  ).optional().default([]),
+});
+
+const esquemaAtualizacaoProduto = z
+  .object({
+    categoriaId: z.string().trim().min(1).optional(),
+    nome: z.string().trim().min(2).max(150).optional(),
+    slug: z.string().trim().min(2).max(180).optional(),
+    descricao: z.string().trim().optional(),
+    preco: z.coerce.number().positive().optional(),
+    estoque: z.coerce.number().int().min(0).optional(),
+    materialIds: z.preprocess(
+      normalizarMaterialIds,
+      esquemaMaterialIds
+    ).optional(),
+  })
+  .strict();
+
+function extrairCaminhoImagem(urlImagem) {
+  if (!urlImagem) return null;
 
   const bucket = process.env.SUPABASE_STORAGE_BUCKET;
 
@@ -71,12 +113,44 @@ async function removerImagemDoStorage(urlImagem) {
   }
 }
 
-// ======================================================
-// CADASTRAR PRODUTO
-// ======================================================
+// Confere se todos os materiais informados existem.
+async function validarMateriais(tx, materialIds) {
+  if (materialIds.length === 0) return;
 
+  const materiaisEncontrados = await tx.material.findMany({
+    where: {
+      id: {
+        in: materialIds,
+      },
+    },
+    select: {
+      id: true,
+    },
+  });
+
+  const idsEncontrados = new Set(
+    materiaisEncontrados.map((material) => material.id)
+  );
+
+  const idsInvalidos = materialIds.filter(
+    (id) => !idsEncontrados.has(id)
+  );
+
+  if (idsInvalidos.length > 0) {
+    const erro = new Error(
+      `Material(is) não encontrado(s): ${idsInvalidos.join(", ")}.`
+    );
+    erro.code = "MATERIAL_NAO_ENCONTRADO";
+    throw erro;
+  }
+}
+
+// Cadastra um produto e seus materiais.
 export async function criarProduto(dados, arquivo) {
-  const dadosValidados = esquemaProduto.parse(dados);
+  const dadosValidados = esquemaProduto.parse({
+    ...dados,
+    materialIds: normalizarMaterialIds(dados.materialIds),
+  });
 
   let imagemEnviada = null;
 
@@ -86,14 +160,26 @@ export async function criarProduto(dados, arquivo) {
     }
 
     const produto = await prisma.$transaction(async (tx) => {
+      await validarMateriais(tx, dadosValidados.materialIds);
+
       const novoProduto = await tx.produto.create({
         data: {
           categoriaId: dadosValidados.categoriaId,
           nome: dadosValidados.nome,
           slug: dadosValidados.slug,
-          descricao: dadosValidados.descricao || "",
+          descricao: dadosValidados.descricao ?? "",
           preco: dadosValidados.preco,
           estoque: dadosValidados.estoque,
+
+          materiais: {
+            create: dadosValidados.materialIds.map((materialId) => ({
+              material: {
+                connect: {
+                  id: materialId,
+                },
+              },
+            })),
+          },
         },
       });
 
@@ -129,30 +215,29 @@ export async function criarProduto(dados, arquivo) {
       }
     }
 
+    if (erro.code === "P2002") {
+      throw new Error("Já existe um produto com esse slug.");
+    }
+
+    if (erro.code === "P2003") {
+      throw new Error("A categoria informada não existe.");
+    }
+
     throw erro;
   }
 }
 
-// ======================================================
-// LISTAR PRODUTOS
-// ======================================================
-
+// Lista os produtos ativos.
 export async function listarProdutos() {
   return listarProdutosModel();
 }
 
-// ======================================================
-// BUSCAR PRODUTO POR ID
-// ======================================================
-
+// Busca um produto pelo ID.
 export async function buscarProdutoPorId(id) {
   return buscarProdutoPorIdModel(id);
 }
 
-// ======================================================
-// EXCLUIR PRODUTO E SUAS IMAGENS
-// ======================================================
-
+// Exclui o produto e tenta remover suas imagens do Storage.
 export async function excluirProduto(id) {
   const produto = await buscarProdutoPorIdModel(id);
 
@@ -161,12 +246,8 @@ export async function excluirProduto(id) {
   }
 
   const imagens = produto.imagens ?? [];
-
-  // A exclusão no banco acontece primeiro.
-  // Se falhar, nenhum arquivo será removido do Storage.
   const produtoExcluido = await excluirProdutoModel(id);
 
-  // Depois, tentamos excluir os arquivos físicos.
   const resultados = await Promise.allSettled(
     imagens.map((imagem) => removerImagemDoStorage(imagem.url))
   );
@@ -189,10 +270,7 @@ export async function excluirProduto(id) {
   };
 }
 
-// ======================================================
-// ATUALIZAR PRODUTO E SUA IMAGEM PRINCIPAL
-// ======================================================
-
+// Atualiza os dados do produto, os materiais e, opcionalmente, a imagem principal.
 export async function atualizarProduto(id, dados, arquivo) {
   if (!id) {
     throw new Error("O ID do produto é obrigatório.");
@@ -204,20 +282,33 @@ export async function atualizarProduto(id, dados, arquivo) {
     throw new Error("PRODUTO_NAO_ENCONTRADO");
   }
 
-  const dadosValidados = esquemaAtualizacaoProduto.parse(dados);
+  const dadosValidados = esquemaAtualizacaoProduto.parse({
+    ...dados,
+    ...(dados.materialIds !== undefined
+      ? { materialIds: normalizarMaterialIds(dados.materialIds) }
+      : {}),
+  });
+
+  const {
+    materialIds,
+    ...camposProduto
+  } = dadosValidados;
 
   const produtoAtualizado = Object.fromEntries(
-    Object.entries(dadosValidados).filter(
+    Object.entries(camposProduto).filter(
       ([, valor]) => valor !== undefined
     )
   );
 
+  const atualizarMateriais = materialIds !== undefined;
+
   if (
     Object.keys(produtoAtualizado).length === 0 &&
+    !atualizarMateriais &&
     !arquivo
   ) {
     throw new Error(
-      "Informe dados ou uma nova imagem para atualizar."
+      "Informe dados, materiais ou uma nova imagem para atualizar."
     );
   }
 
@@ -229,12 +320,15 @@ export async function atualizarProduto(id, dados, arquivo) {
   let atualizacaoConcluida = false;
 
   try {
-    // Envia a nova imagem antes de alterar o banco.
     if (arquivo) {
       novaImagem = await enviarImagem(arquivo, "produtos");
     }
 
     const produto = await prisma.$transaction(async (tx) => {
+      if (atualizarMateriais) {
+        await validarMateriais(tx, materialIds);
+      }
+
       if (Object.keys(produtoAtualizado).length > 0) {
         await tx.produto.update({
           where: {
@@ -242,6 +336,23 @@ export async function atualizarProduto(id, dados, arquivo) {
           },
           data: produtoAtualizado,
         });
+      }
+
+      if (atualizarMateriais) {
+        await tx.produtoMaterial.deleteMany({
+          where: {
+            produtoId: id,
+          },
+        });
+
+        if (materialIds.length > 0) {
+          await tx.produtoMaterial.createMany({
+            data: materialIds.map((materialId) => ({
+              produtoId: id,
+              materialId,
+            })),
+          });
+        }
       }
 
       if (novaImagem) {
@@ -280,7 +391,6 @@ export async function atualizarProduto(id, dados, arquivo) {
 
     atualizacaoConcluida = true;
 
-    // Remove a imagem antiga somente após o sucesso no banco.
     if (novaImagem && imagemPrincipal) {
       try {
         await removerImagemDoStorage(imagemPrincipal.url);
@@ -294,7 +404,6 @@ export async function atualizarProduto(id, dados, arquivo) {
 
     return produto;
   } catch (erro) {
-    // Se o banco falhou, tenta remover a nova imagem enviada.
     if (novaImagem && !atualizacaoConcluida) {
       try {
         await excluirImagem(novaImagem.caminho);
@@ -306,22 +415,19 @@ export async function atualizarProduto(id, dados, arquivo) {
       }
     }
 
-    if (erro.code === "P2025") {
-      throw new Error("Produto ou categoria não encontrada.");
-    }
-
     if (erro.code === "P2002") {
       throw new Error("Já existe um produto com esse slug.");
+    }
+
+    if (erro.code === "P2003") {
+      throw new Error("A categoria ou um material informado não existe.");
     }
 
     throw erro;
   }
 }
 
-// ======================================================
-// ATUALIZAR STATUS DO PRODUTO
-// ======================================================
-
+// Ativa ou desativa um produto sem excluí-lo do banco.
 export async function atualizarStatusProdutoService(id, ativo) {
   if (!id) {
     throw new Error("O ID do produto é obrigatório.");

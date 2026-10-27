@@ -10,6 +10,7 @@ import AdminProdutos from "./pages/admin/AdminProdutos.jsx";
 import AdminPedidos from "./pages/admin/AdminPedidos.jsx";
 import AdminClientes from "./pages/admin/AdminClientes.jsx";
 import AdminCategorias from "./pages/admin/AdminCategorias.jsx";
+import AdminMateriais from "./pages/admin/AdminMateriais.jsx";
 
 export default function App() {
   return (
@@ -33,6 +34,7 @@ export default function App() {
           <Route path="pedidos" element={<AdminPedidos />} />
           <Route path="clientes" element={<AdminClientes />} />
           <Route path="categorias" element={<AdminCategorias />} />
+          <Route path="/admin/materiais" element={<AdminMateriais />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -28,6 +28,20 @@ export async function cadastrarProduto(req, res) {
       });
     }
 
+    if (erro.message === "MATERIAL_NAO_ENCONTRADO") {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: "Um ou mais materiais informados não existem.",
+      });
+    }
+
+    if (erro.message === "MATERIAIS_DUPLICADOS") {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: "A lista contém materiais duplicados.",
+      });
+    }
+
     if (
       erro instanceof Prisma.PrismaClientKnownRequestError &&
       erro.code === "P2002"
@@ -179,22 +193,36 @@ export async function atualizarProdutoController(req, res, next) {
       });
     }
 
+    if (erro.message === "MATERIAL_NAO_ENCONTRADO") {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: "Um ou mais materiais informados não existem.",
+      });
+    }
+
+    if (erro.message === "MATERIAIS_DUPLICADOS") {
+      return res.status(400).json({
+        sucesso: false,
+        mensagem: "A lista contém materiais duplicados.",
+      });
+    }
+
     return next(erro);
   }
 }
 
 export async function atualizarStatusProdutoController(req, res, next) {
-    try {
-        const { id } = req.params;
-        const { ativo } = req.body;
+  try {
+    const { id } = req.params;
+    const { ativo } = req.body;
 
-        const produto = await atualizarStatusProdutoService(id, ativo);
+    const produto = await atualizarStatusProdutoService(id, ativo);
 
-        return res.status(200).json({
-            mensagem: `Produto ${ativo ? "ativado" : "desativado"} com sucesso.`,
-            produto,
-        });
-    } catch (erro) {
-        return next(erro);
-    }
+    return res.status(200).json({
+      mensagem: `Produto ${ativo ? "ativado" : "desativado"} com sucesso.`,
+      produto,
+    });
+  } catch (erro) {
+    return next(erro);
+  }
 }

@@ -92,6 +92,7 @@ model ImagemCategoria {
   @@index([categoriaId])
 }
 
+
 model Produto {
   id           String   @id @default(cuid())
   categoriaId  String
@@ -104,14 +105,33 @@ model Produto {
   criadoEm     DateTime @default(now())
   atualizadoEm DateTime @updatedAt
 
-  categoria     Categoria       @relation(fields: [categoriaId], references: [id], onDelete: Restrict)
+  categoria     Categoria         @relation(fields: [categoriaId], references: [id], onDelete: Restrict)
   imagens       ImagemProduto[]
   itensCarrinho ItemCarrinho[]
   itensPedido   ItemPedido[]
+  materiais     ProdutoMaterial[]
 
   @@index([categoriaId])
   @@index([ativo])
 }
+
+model Material {
+  id       Int               @id @default(autoincrement())
+  nome     String            @unique
+  produtos ProdutoMaterial[]
+}
+
+model ProdutoMaterial {
+  produtoId  String
+  materialId Int
+
+  produto  Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  material Material @relation(fields: [materialId], references: [id], onDelete: Restrict)
+
+  @@id([produtoId, materialId])
+  @@index([materialId])
+}
+
 
 model ImagemProduto {
   id               String   @id @default(cuid())

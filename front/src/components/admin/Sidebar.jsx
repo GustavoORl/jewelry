@@ -9,6 +9,7 @@ import {
   TrendingUp,
   MoreHorizontal,
   X,
+  Gem,
 } from "lucide-react";
 
 const navigation = [
@@ -17,6 +18,7 @@ const navigation = [
   { label: "Pedidos", icon: ShoppingBag, to: "/admin/pedidos", count: "8" },
   { label: "Clientes", icon: Users, to: "/admin/clientes" },
   { label: "Categorias", icon: Tags, to: "/admin/categorias" },
+  { label: "Materiais", icon: Gem, to: "/admin/materiais"},
 ];
 
 export default function Sidebar({ mobileOpen, onClose }) {

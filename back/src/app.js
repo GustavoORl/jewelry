@@ -6,6 +6,7 @@ import usuarioRoutes from "./routes/usuarioRoutes.js";
 import produtoRoutes from "./routes/produtoRoutes.js";
 import authRoutes from "./routes/authRoutes.js";
 import categoriaRoutes from "./routes/categoriaRoutes.js";
+import materialRoutes from "./routes/materialRoutes.js"
 
 const app = express();
 
@@ -26,5 +27,6 @@ app.use("/api/usuarios", usuarioRoutes);
 app.use("/api/produtos", produtoRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/categorias", categoriaRoutes);
+app.use("/api/materiais", materialRoutes);
 
 export default app;

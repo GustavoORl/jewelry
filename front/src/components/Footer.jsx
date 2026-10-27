@@ -52,7 +52,7 @@ export default function Footer() {
             href="/"
             className="font-serif text-2xl tracking-tight"
           >
-            AURELIA
+            AURORA
           </a>
 
           <p className="mt-3 max-w-[280px] text-xs leading-[1.7] text-[#C1BAAF]">
@@ -185,7 +185,7 @@ export default function Footer() {
       <div className="border-t border-white/10">
         <div className="mx-auto flex max-w-[1320px] flex-col gap-3 px-6 py-5 text-[10px] text-[#A9A197] sm:px-8 md:flex-row md:items-center md:justify-between lg:px-12">
           <p>
-            © 2026 Aurelia Marketplace · CNPJ 00.000.000/0001-00
+            © 2026 Aurora Marketplace · CNPJ 00.000.000/0001-00
           </p>
 
           <p>
