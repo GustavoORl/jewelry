@@ -18,57 +18,9 @@ import {
   RefreshCw,
 } from "lucide-react";
 
+import { apiFetch } from "../../services/api.js";
+
 const API_URL = import.meta.env.VITE_API_URL;
-
-async function requisicao(endpoint, opcoes = {}) {
-  if (!API_URL) {
-    throw new Error(
-      "A variável VITE_API_URL não está configurada no arquivo .env do frontend."
-    );
-  }
-
-  const token = sessionStorage.getItem("aurelia_token");
-  const ehFormData =
-    typeof FormData !== "undefined" && opcoes.body instanceof FormData;
-  const temBody = opcoes.body !== undefined && opcoes.body !== null;
-
-  const response = await fetch(
-    `${API_URL.replace(/\/$/, "")}${endpoint}`,
-    {
-      ...opcoes,
-      headers: {
-        ...(temBody && !ehFormData
-          ? { "Content-Type": "application/json" }
-          : {}),
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...opcoes.headers,
-      },
-    }
-  );
-
-  if (response.status === 204) return null;
-
-  const texto = await response.text();
-  let resultado = null;
-
-  if (texto) {
-    try {
-      resultado = JSON.parse(texto);
-    } catch {
-      resultado = { mensagem: texto };
-    }
-  }
-
-  if (!response.ok) {
-    throw new Error(
-      resultado?.mensagem ||
-        resultado?.message ||
-        `Erro na requisição (${response.status}).`
-    );
-  }
-
-  return resultado;
-}
 
 const currency = (value) =>
   new Intl.NumberFormat("pt-BR", {
@@ -494,9 +446,9 @@ export default function AdminProdutos() {
         respostaCategorias,
         respostaMateriais,
       ] = await Promise.all([
-        requisicao("/produtos"),
-        requisicao("/categorias"),
-        requisicao("/materiais"),
+        apiFetch("/admin/produtos"),
+        apiFetch("/admin/categorias"),
+        apiFetch("/admin/materiais"),
       ]);
 
       const produtosRecebidos = Array.isArray(respostaProdutos)
@@ -594,8 +546,8 @@ export default function AdminProdutos() {
       }
 
       if (modalProduct) {
-        const resultado = await requisicao(
-          `/produtos/${modalProduct.id}`,
+        const resultado = await apiFetch(
+          `/admin/produtos/${modalProduct.id}`,
           {
             method: "PATCH",
             body: formData,
@@ -614,7 +566,7 @@ export default function AdminProdutos() {
 
         setNotice("Produto atualizado com sucesso.");
       } else {
-        const resultado = await requisicao("/produtos", {
+        const resultado = await apiFetch("/admin/produtos", {
           method: "POST",
           body: formData,
         });
@@ -653,8 +605,8 @@ export default function AdminProdutos() {
     try {
       setError("");
 
-      const resultado = await requisicao(
-        `/produtos/${product.id}/status`,
+      const resultado = await apiFetch(
+        `/admin/produtos/${product.id}/status`,
         {
           method: "PATCH",
           body: JSON.stringify({ ativo: novoStatus }),
@@ -690,7 +642,7 @@ export default function AdminProdutos() {
     try {
       setError("");
 
-      await requisicao(`/produtos/${product.id}`, {
+      await apiFetch(`/admin/produtos/${product.id}`, {
         method: "DELETE",
       });
 

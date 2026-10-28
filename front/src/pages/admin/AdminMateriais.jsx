@@ -20,7 +20,7 @@ import {
 import Sidebar from "../../components/admin/Sidebar.jsx";
 import AdminHeader from "../../components/admin/AdminHeader.jsx";
 
-const API_URL = `${import.meta.env.VITE_API_URL || "http://localhost:3000/api"}/materiais`;
+import { apiFetch } from "../../services/api.js";
 
 const LIMITE_POR_PAGINA = 8;
 
@@ -31,28 +31,6 @@ const CORES = {
   douradoClaro: "#E9DCC4",
   texto: "#211C14",
 };
-
-async function requisicaoMateriais(url, opcoes = {}) {
-  const resposta = await fetch(url, {
-    ...opcoes,
-    headers: {
-      ...(opcoes.body instanceof FormData
-        ? {}
-        : { "Content-Type": "application/json" }),
-      ...opcoes.headers,
-    },
-  });
-
-  const dados = await resposta.json().catch(() => ({}));
-
-  if (!resposta.ok) {
-    throw new Error(
-      dados.mensagem || "Não foi possível concluir a operação."
-    );
-  }
-
-  return dados;
-}
 
 function formatarData(data) {
   if (!data) return "—";
@@ -370,7 +348,7 @@ export default function AdminMateriais() {
     setErro("");
 
     try {
-      const dados = await requisicaoMateriais(API_URL);
+      const dados = await apiFetch("/admin/materiais");
       setMateriais(dados.materiais ?? []);
     } catch (erroCarregamento) {
       setErro(obterMensagemErro(erroCarregamento));
@@ -431,17 +409,14 @@ export default function AdminMateriais() {
 
     try {
       if (materialEditando) {
-        await requisicaoMateriais(
-          `${API_URL}/${materialEditando.id}`,
-          {
-            method: "PATCH",
-            body: JSON.stringify(dados),
-          }
-        );
+        await apiFetch(`/admin/materiais/${materialEditando.id}`, {
+          method: "PATCH",
+          body: JSON.stringify(dados),
+        });
 
         setNotificacao("Material atualizado com sucesso.");
       } else {
-        await requisicaoMateriais(API_URL, {
+        await apiFetch("/admin/materiais", {
           method: "POST",
           body: JSON.stringify(dados),
         });
@@ -463,7 +438,7 @@ export default function AdminMateriais() {
     setExcluindo(true);
 
     try {
-      await requisicaoMateriais(`${API_URL}/${material.id}`, {
+      await apiFetch(`/admin/materiais/${material.id}`, {
         method: "DELETE",
       });
 
