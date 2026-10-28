@@ -3,8 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
     ArrowDownUp,
-    ArrowLeft,
-    ArrowRight,
     Heart,
     Search,
     ShoppingBag,
@@ -12,57 +10,13 @@ import {
     X,
 } from "lucide-react";
 
-const API_URL = import.meta.env.VITE_API_URL;
+import { apiFetch } from "../services/api.js";
 
 const imagemPadrao =
     "https://images.unsplash.com/photo-1617038220319-276d3cfab638?auto=format&fit=crop&w=600&q=80";
 
-const materiaisPrincipais = [
-    "Todos",
-    "Ouro",
-    "Prata",
-    "Pérola",
-    "Zircônia",
-];
-
-async function requisicao(endpoint) {
-    if (!API_URL) {
-        throw new Error(
-            "A variável VITE_API_URL não está configurada."
-        );
-    }
-
-    const token = sessionStorage.getItem("aurora_token");
-
-    const resposta = await fetch(
-        `${API_URL.replace(/\/$/, "")}${endpoint}`,
-        {
-            headers: {
-                ...(token
-                    ? { Authorization: `Bearer ${token}` }
-                    : {}),
-            },
-        }
-    );
-
-    const resultado =
-        resposta.status === 204
-            ? {}
-            : await resposta.json().catch(() => ({}));
-
-    if (!resposta.ok) {
-        throw new Error(
-            resultado.mensagem ||
-            resultado.message ||
-            `Erro na requisição (${resposta.status}).`
-        );
-    }
-
-    return resultado;
-}
-
 function normalizarNome(nome = "") {
-    const normalizado = nome
+    const normalizado = String(nome)
         .trim()
         .toLocaleLowerCase("pt-BR")
         .normalize("NFD")
@@ -74,6 +28,16 @@ function normalizarNome(nome = "") {
     };
 
     return equivalencias[normalizado] || normalizado;
+}
+
+function gerarSlugCategoria(nome = "") {
+    return String(nome)
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
 }
 
 function formatarPreco(valor) {
@@ -122,6 +86,7 @@ function extrairLista(resultado, chave) {
     if (Array.isArray(resultado)) return resultado;
     if (Array.isArray(resultado?.[chave])) return resultado[chave];
     if (Array.isArray(resultado?.dados)) return resultado.dados;
+
     return [];
 }
 
@@ -144,7 +109,9 @@ function CardProduto({
                         alt={produto.nome}
                         loading="lazy"
                         onError={(event) => {
-                            if (event.currentTarget.src !== imagemPadrao) {
+                            if (
+                                event.currentTarget.src !== imagemPadrao
+                            ) {
                                 event.currentTarget.src = imagemPadrao;
                             }
                         }}
@@ -167,10 +134,11 @@ function CardProduto({
                             : "Adicionar aos favoritos"
                     }
                     aria-pressed={favorito}
-                    className={`absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border bg-white/95 transition-colors ${favorito
-                        ? "border-[#B9975B] text-[#A47B43]"
-                        : "border-[#E8DDCA] text-[#211C14] hover:border-[#B9975B]"
-                        }`}
+                    className={`absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border bg-white/95 transition-colors ${
+                        favorito
+                            ? "border-[#B9975B] text-[#A47B43]"
+                            : "border-[#E8DDCA] text-[#211C14] hover:border-[#B9975B]"
+                    }`}
                 >
                     <Heart
                         size={18}
@@ -219,7 +187,10 @@ function CardProduto({
 
 export default function ListagemProdutos() {
     const [searchParams, setSearchParams] = useSearchParams();
+
     const buscaUrl = searchParams.get("busca") || "";
+    const categoriaUrl = searchParams.get("categoria") || "";
+
     const [produtos, setProdutos] = useState([]);
     const [categorias, setCategorias] = useState([]);
     const [materiais, setMateriais] = useState([]);
@@ -241,12 +212,15 @@ export default function ListagemProdutos() {
             setCarregando(true);
             setErro("");
 
-            const [resultadoProdutos, resultadoCategorias, resultadoMateriais] =
-                await Promise.all([
-                    requisicao("/produtos"),
-                    requisicao("/categorias"),
-                    requisicao("/materiais"),
-                ]);
+            const [
+                resultadoProdutos,
+                resultadoCategorias,
+                resultadoMateriais,
+            ] = await Promise.all([
+                apiFetch("/produtos"),
+                apiFetch("/categorias"),
+                apiFetch("/materiais"),
+            ]);
 
             const listaProdutos = extrairLista(
                 resultadoProdutos,
@@ -282,16 +256,13 @@ export default function ListagemProdutos() {
             );
         } catch (error) {
             setErro(
-                error.message || "Não foi possível carregar o catálogo."
+                error.message ||
+                    "Não foi possível carregar o catálogo."
             );
         } finally {
             setCarregando(false);
         }
     }, []);
-
-    useEffect(() => {
-        setBusca(buscaUrl);
-    }, [buscaUrl]);
 
     useEffect(() => {
         carregarDados();
@@ -321,16 +292,57 @@ export default function ListagemProdutos() {
         );
     }, [materiais, produtos]);
 
+    // Sincroniza a busca com o parâmetro da URL.
+    useEffect(() => {
+        setBusca(buscaUrl);
+    }, [buscaUrl]);
+
+    // Seleciona a categoria informada na URL.
+    useEffect(() => {
+        if (!categoriaUrl) {
+            setCategoriaAtiva("Todas");
+            return;
+        }
+
+        const slugUrl = gerarSlugCategoria(categoriaUrl);
+
+        const categoriaEncontrada = categorias.find((categoria) => {
+            const slugCategoria = gerarSlugCategoria(
+                categoria.slug || categoria.nome || ""
+            );
+
+            return slugCategoria === slugUrl;
+        });
+
+        if (categoriaEncontrada) {
+            setCategoriaAtiva(categoriaEncontrada.nome);
+            return;
+        }
+
+        // Compatibilidade caso a URL contenha o nome da categoria.
+        const categoriaPorNome = categoriasDisponiveis.find(
+            (nome) => normalizarNome(nome) === normalizarNome(categoriaUrl)
+        );
+
+        setCategoriaAtiva(categoriaPorNome || "Todas");
+    }, [categoriaUrl, categorias, categoriasDisponiveis]);
+
     const produtosFiltrados = useMemo(() => {
         const resultado = produtos.filter((produto) => {
-            const correspondeBusca = produto.nome
-                ?.toLocaleLowerCase("pt-BR")
-                .includes(busca.trim().toLocaleLowerCase("pt-BR"));
+            const nomeProduto = (produto.nome || "")
+                .toLocaleLowerCase("pt-BR");
+
+            const termoBusca = busca
+                .trim()
+                .toLocaleLowerCase("pt-BR");
+
+            const correspondeBusca =
+                nomeProduto.includes(termoBusca);
 
             const correspondeCategoria =
                 categoriaAtiva === "Todas" ||
                 normalizarNome(produto.categoriaNome) ===
-                normalizarNome(categoriaAtiva);
+                    normalizarNome(categoriaAtiva);
 
             const correspondeMaterial =
                 materialAtivo === "Todos" ||
@@ -362,7 +374,10 @@ export default function ListagemProdutos() {
 
             case "nome":
                 resultado.sort((a, b) =>
-                    a.nome.localeCompare(b.nome, "pt-BR")
+                    (a.nome || "").localeCompare(
+                        b.nome || "",
+                        "pt-BR"
+                    )
                 );
                 break;
 
@@ -391,6 +406,30 @@ export default function ListagemProdutos() {
         ordenacao,
     ]);
 
+    function selecionarCategoria(categoria) {
+        setCategoriaAtiva(categoria);
+
+        const novosParametros = new URLSearchParams(searchParams);
+
+        if (categoria === "Todas") {
+            novosParametros.delete("categoria");
+        } else {
+            const categoriaEncontrada = categorias.find(
+                (item) =>
+                    normalizarNome(item.nome) ===
+                    normalizarNome(categoria)
+            );
+
+            novosParametros.set(
+                "categoria",
+                categoriaEncontrada?.slug ||
+                    gerarSlugCategoria(categoria)
+            );
+        }
+
+        setSearchParams(novosParametros, { replace: true });
+    }
+
     function alternarFavorito(id) {
         setFavoritos((atuais) =>
             atuais.includes(id)
@@ -408,6 +447,13 @@ export default function ListagemProdutos() {
         setCategoriaAtiva("Todas");
         setMaterialAtivo("Todos");
         setOrdenacao("recentes");
+
+        const novosParametros = new URLSearchParams(searchParams);
+
+        novosParametros.delete("busca");
+        novosParametros.delete("categoria");
+
+        setSearchParams(novosParametros, { replace: true });
     }
 
     const possuiFiltros =
@@ -419,27 +465,27 @@ export default function ListagemProdutos() {
         <main className="min-h-screen bg-[#FCFAF6] text-[#211C14]">
             {/* Cabeçalho editorial */}
             <section className="border-b border-[#EAE0CE] bg-[#F7F2E8] px-5 py-2 sm:px-8 lg:px-12">
-                <div className="mx-auto max-w-[1320px] flex justify-between items-center">
-
+                <div className="mx-auto flex max-w-[1320px] items-center justify-between">
                     <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-[#A47B43]">
-                        AURORA · Nossa coleção
+                        AURELIA · Nossa coleção
                     </p>
 
-                        <div className="text-sm text-[#847A6C]">
-                            {carregando
-                                ? "Carregando coleção..."
-                                : `${produtosFiltrados.length} ${produtosFiltrados.length === 1
-                                    ? "peça encontrada"
-                                    : "peças encontradas"
-                                }`}
-                        </div>
+                    <div className="text-sm text-[#847A6C]">
+                        {carregando
+                            ? "Carregando coleção..."
+                            : `${produtosFiltrados.length} ${
+                                  produtosFiltrados.length === 1
+                                      ? "peça encontrada"
+                                      : "peças encontradas"
+                              }`}
+                    </div>
                 </div>
             </section>
 
             {/* Catálogo */}
             <section className="px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-12">
                 <div className="mx-auto max-w-[1320px]">
-                    {/* ordenação */}
+                    {/* Ordenação */}
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex flex-col gap-3 sm:flex-row">
                             <button
@@ -472,10 +518,18 @@ export default function ListagemProdutos() {
                                     aria-label="Ordenar produtos"
                                     className="min-w-0 bg-transparent text-xs outline-none"
                                 >
-                                    <option value="recentes">Mais recentes</option>
-                                    <option value="menor-preco">Menor preço</option>
-                                    <option value="maior-preco">Maior preço</option>
-                                    <option value="nome">Nome A–Z</option>
+                                    <option value="recentes">
+                                        Mais recentes
+                                    </option>
+                                    <option value="menor-preco">
+                                        Menor preço
+                                    </option>
+                                    <option value="maior-preco">
+                                        Maior preço
+                                    </option>
+                                    <option value="nome">
+                                        Nome A–Z
+                                    </option>
                                 </select>
                             </label>
                         </div>
@@ -484,8 +538,9 @@ export default function ListagemProdutos() {
                     <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
                         {/* Barra lateral de filtros */}
                         <aside
-                            className={`${mostrarFiltros ? "block" : "hidden"
-                                } lg:block`}
+                            className={`${
+                                mostrarFiltros ? "block" : "hidden"
+                            } lg:block`}
                         >
                             <div className="rounded-2xl border border-[#EAE0CE] bg-white p-5">
                                 <div className="mb-5 flex items-center justify-between">
@@ -514,32 +569,41 @@ export default function ListagemProdutos() {
                                             <input
                                                 type="radio"
                                                 name="categoria"
-                                                checked={categoriaAtiva === "Todas"}
+                                                checked={
+                                                    categoriaAtiva === "Todas"
+                                                }
                                                 onChange={() =>
-                                                    setCategoriaAtiva("Todas")
+                                                    selecionarCategoria("Todas")
                                                 }
                                                 className="accent-[#968052]"
                                             />
                                             Todas as categorias
                                         </label>
 
-                                        {categoriasDisponiveis.map((categoria) => (
-                                            <label
-                                                key={categoria}
-                                                className="flex cursor-pointer items-center gap-3 text-sm"
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    name="categoria"
-                                                    checked={categoriaAtiva === categoria}
-                                                    onChange={() =>
-                                                        setCategoriaAtiva(categoria)
-                                                    }
-                                                    className="accent-[#968052]"
-                                                />
-                                                {categoria}
-                                            </label>
-                                        ))}
+                                        {categoriasDisponiveis.map(
+                                            (categoria) => (
+                                                <label
+                                                    key={categoria}
+                                                    className="flex cursor-pointer items-center gap-3 text-sm"
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="categoria"
+                                                        checked={
+                                                            categoriaAtiva ===
+                                                            categoria
+                                                        }
+                                                        onChange={() =>
+                                                            selecionarCategoria(
+                                                                categoria
+                                                            )
+                                                        }
+                                                        className="accent-[#968052]"
+                                                    />
+                                                    {categoria}
+                                                </label>
+                                            )
+                                        )}
                                     </div>
                                 </div>
 
@@ -553,7 +617,9 @@ export default function ListagemProdutos() {
                                             <input
                                                 type="radio"
                                                 name="material"
-                                                checked={materialAtivo === "Todos"}
+                                                checked={
+                                                    materialAtivo === "Todos"
+                                                }
                                                 onChange={() =>
                                                     setMaterialAtivo("Todos")
                                                 }
@@ -562,23 +628,30 @@ export default function ListagemProdutos() {
                                             Todos os materiais
                                         </label>
 
-                                        {materiaisDisponiveis.map((material) => (
-                                            <label
-                                                key={material}
-                                                className="flex cursor-pointer items-center gap-3 text-sm"
-                                            >
-                                                <input
-                                                    type="radio"
-                                                    name="material"
-                                                    checked={materialAtivo === material}
-                                                    onChange={() =>
-                                                        setMaterialAtivo(material)
-                                                    }
-                                                    className="accent-[#968052]"
-                                                />
-                                                {material}
-                                            </label>
-                                        ))}
+                                        {materiaisDisponiveis.map(
+                                            (material) => (
+                                                <label
+                                                    key={material}
+                                                    className="flex cursor-pointer items-center gap-3 text-sm"
+                                                >
+                                                    <input
+                                                        type="radio"
+                                                        name="material"
+                                                        checked={
+                                                            materialAtivo ===
+                                                            material
+                                                        }
+                                                        onChange={() =>
+                                                            setMaterialAtivo(
+                                                                material
+                                                            )
+                                                        }
+                                                        className="accent-[#968052]"
+                                                    />
+                                                    {material}
+                                                </label>
+                                            )
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -595,7 +668,21 @@ export default function ListagemProdutos() {
                                     {busca.trim() && (
                                         <button
                                             type="button"
-                                            onClick={() => setBusca("")}
+                                            onClick={() => {
+                                                setBusca("");
+
+                                                const novosParametros =
+                                                    new URLSearchParams(
+                                                        searchParams
+                                                    );
+
+                                                novosParametros.delete("busca");
+
+                                                setSearchParams(
+                                                    novosParametros,
+                                                    { replace: true }
+                                                );
+                                            }}
                                             className="inline-flex items-center gap-2 rounded-full bg-[#F0E8D9] px-3 py-1.5 text-xs"
                                         >
                                             Busca: {busca}
@@ -606,7 +693,9 @@ export default function ListagemProdutos() {
                                     {categoriaAtiva !== "Todas" && (
                                         <button
                                             type="button"
-                                            onClick={() => setCategoriaAtiva("Todas")}
+                                            onClick={() =>
+                                                selecionarCategoria("Todas")
+                                            }
                                             className="inline-flex items-center gap-2 rounded-full bg-[#F0E8D9] px-3 py-1.5 text-xs"
                                         >
                                             {categoriaAtiva}
@@ -617,7 +706,9 @@ export default function ListagemProdutos() {
                                     {materialAtivo !== "Todos" && (
                                         <button
                                             type="button"
-                                            onClick={() => setMaterialAtivo("Todos")}
+                                            onClick={() =>
+                                                setMaterialAtivo("Todos")
+                                            }
                                             className="inline-flex items-center gap-2 rounded-full bg-[#F0E8D9] px-3 py-1.5 text-xs"
                                         >
                                             {materialAtivo}
@@ -676,8 +767,9 @@ export default function ListagemProdutos() {
                                     </h2>
 
                                     <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[#847A6C]">
-                                        Não encontramos produtos com esses critérios.
-                                        Experimente mudar sua busca ou seus filtros.
+                                        Não encontramos produtos com esses
+                                        critérios. Experimente mudar sua busca
+                                        ou seus filtros.
                                     </p>
 
                                     <button
@@ -694,9 +786,15 @@ export default function ListagemProdutos() {
                                         <CardProduto
                                             key={produto.id}
                                             produto={produto}
-                                            favorito={favoritos.includes(produto.id)}
-                                            aoAlternarFavorito={alternarFavorito}
-                                            aoAdicionarSacola={adicionarSacola}
+                                            favorito={favoritos.includes(
+                                                produto.id
+                                            )}
+                                            aoAlternarFavorito={
+                                                alternarFavorito
+                                            }
+                                            aoAdicionarSacola={
+                                                adicionarSacola
+                                            }
                                         />
                                     ))}
                                 </div>

@@ -7,7 +7,111 @@
     <title>jewelry</title>
   </head>
   <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
+    
+<body>
+  <div id="loading-screen">
+    <div class="loading-brand">
+      <div class="loading-logo">A</div>
+      <h1>AURORA</h1>
+      <p>MARKETPLACE DE JOIAS</p>
+    </div>
+
+    <div class="loading-progress">
+      <div class="loading-bar"></div>
+      <p>PREPARANDO SUA EXPERIÊNCIA</p>
+    </div>
+
+    <span class="loading-footer">
+      ELEGÂNCIA EM CADA DETALHE
+    </span>
+  </div>
+
+  <div id="root"></div>
+
+  <script type="module" src="/src/main.jsx"></script>
+
+  <style>
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: #FAF9F5;
+      color: #211C14;
+      font-family: Georgia, serif;
+    }
+
+    .loading-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    .loading-logo {
+      display: grid;
+      place-items: center;
+      width: 80px;
+      height: 80px;
+      border: 1px solid #B9975B;
+      border-radius: 50%;
+      background: #211C14;
+      color: #E9DCC4;
+      font-size: 44px;
+    }
+
+    .loading-brand h1 {
+      margin: 28px 0 0;
+      font-size: 30px;
+      font-weight: normal;
+      letter-spacing: 0.18em;
+    }
+
+    .loading-brand p,
+    .loading-progress p,
+    .loading-footer {
+      font-family: Arial, sans-serif;
+      font-size: 9px;
+      letter-spacing: 0.25em;
+      color: #968052;
+    }
+
+    .loading-progress {
+      margin-top: 48px;
+      text-align: center;
+    }
+
+    .loading-progress > div {
+      width: 144px;
+      height: 2px;
+      overflow: hidden;
+      background: #E9DCC4;
+    }
+
+    .loading-bar {
+      width: 35%;
+      height: 100%;
+      background: #B9975B;
+      animation: loading 1.4s ease-in-out infinite alternate;
+    }
+
+    .loading-footer {
+      position: absolute;
+      bottom: 32px;
+      color: #B5A77F;
+    }
+
+    #loading-screen {
+  transition: opacity 500ms ease;
+}
+
+    @keyframes loading {
+      from { transform: translateX(0); }
+      to { transform: translateX(185%); }
+    }
+  </style>
+</body>
+
 </html>

@@ -12,7 +12,7 @@ import {
 
 export async function cadastrarProduto(req, res) {
   try {
-    const produto = await criarProduto(req.body, req.file);
+    const produto = await criarProduto(req.body, req.files || []);
 
     return res.status(201).json({
       sucesso: true,
@@ -154,30 +154,34 @@ export async function excluirProdutoController(req, res, next) {
 }
 
 
+
 export async function atualizarProdutoController(req, res, next) {
   try {
     const { id } = req.params;
     const dados = req.body;
+    const imagens = req.files || [];
 
     if (!id) {
       return res.status(400).json({
+        sucesso: false,
         mensagem: "O ID do produto é obrigatório.",
       });
     }
 
     if (
       (!dados || Object.keys(dados).length === 0) &&
-      !req.file
+      imagens.length === 0
     ) {
       return res.status(400).json({
-        mensagem: "Informe dados ou uma imagem para atualizar o produto.",
+        sucesso: false,
+        mensagem: "Informe dados ou imagens para atualizar o produto.",
       });
     }
 
     const produto = await atualizarProduto(
       id,
       dados ?? {},
-      req.file
+      imagens
     );
 
     return res.status(200).json({
@@ -207,9 +211,11 @@ export async function atualizarProdutoController(req, res, next) {
       });
     }
 
+    console.error("Erro ao atualizar produto:", erro);
     return next(erro);
   }
 }
+
 
 export async function atualizarStatusProdutoController(req, res, next) {
   try {

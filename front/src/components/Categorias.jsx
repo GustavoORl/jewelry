@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ArrowRight, ArrowUpRight } from "lucide-react";
+import { Link } from "react-router-dom";
 
 const API_URL = import.meta.env.VITE_API_URL;
 
@@ -25,8 +26,8 @@ async function requisicao(endpoint) {
   if (!resposta.ok) {
     throw new Error(
       resultado.mensagem ||
-        resultado.message ||
-        `Erro na requisição (${resposta.status}).`
+      resultado.message ||
+      `Erro na requisição (${resposta.status}).`
     );
   }
 
@@ -111,8 +112,8 @@ export default function Categorias() {
             </h2>
           </div>
 
-          <a
-            href="/colecoes"
+          <Link
+            to="/produtos"
             className="group hidden shrink-0 items-center gap-2 pb-1 text-xs font-medium sm:inline-flex"
           >
             <span>Ver todas as coleções</span>
@@ -120,7 +121,7 @@ export default function Categorias() {
               size={16}
               className="transition-transform duration-300 group-hover:translate-x-1"
             />
-          </a>
+          </Link>
         </div>
 
         {/* Carregamento */}
@@ -166,9 +167,9 @@ export default function Categorias() {
             ) : (
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-4 lg:gap-5">
                 {categorias.map((categoria) => (
-                  <a
+                  <Link
                     key={categoria.id ?? categoria.slug}
-                    href={`/categoria/${categoria.slug}`}
+                    to={`/produtos?categoria=${encodeURIComponent(categoria.slug)}`}
                     className="group relative block h-[240px] overflow-hidden rounded-[20px] bg-[#E9E0D1] sm:h-[300px] lg:h-[312px]"
                   >
                     {/* Imagem */}
@@ -208,7 +209,7 @@ export default function Categorias() {
                         <ArrowUpRight size={16} />
                       </span>
                     </div>
-                  </a>
+                  </Link>
                 ))}
               </div>
             )}

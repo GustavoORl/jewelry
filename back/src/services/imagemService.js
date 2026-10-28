@@ -20,8 +20,8 @@ export async function enviarImagem(arquivo, pasta = "produtos") {
     throw new Error("Formato inválido. Envie uma imagem JPG, PNG ou WebP.");
   }
 
-  // Limite de 5 MB
-  if (arquivo.size > 5 * 1024 * 1024) {
+  // Limite de 4 MB
+  if (arquivo.size > 4 * 1024 * 1024) {
     throw new Error("A imagem deve ter no máximo 5 MB.");
   }
 

@@ -2,9 +2,11 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import { AuthProvider } from "./contexts/AuthContext.jsx";
 import Layout from "./layout/Layout.jsx";
+
 import Home from "./pages/Home.jsx";
 import Login from "./pages/Login.jsx";
 import ListagemProdutos from "./pages/ListagemProdutos.jsx";
+import ProdutoDetalhado from "./pages/ProdutoDetalhado.jsx";
 
 import RotaProtegida from "./components/RotaProtegida.jsx";
 
@@ -23,9 +25,15 @@ export default function App() {
           {/* Loja pública */}
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
+
             <Route
               path="/produtos"
               element={<ListagemProdutos />}
+            />
+
+            <Route
+              path="/produtos/:id"
+              element={<ProdutoDetalhado />}
             />
           </Route>
 
@@ -34,13 +42,12 @@ export default function App() {
 
           {/* Área administrativa protegida */}
           <Route
-            element={<RotaProtegida tiposPermitidos={["ADMIN"]} />}
+            element={
+              <RotaProtegida tiposPermitidos={["ADMIN"]} />
+            }
           >
             <Route path="/admin">
-              <Route
-                index
-                element={<AdminDashboard />}
-              />
+              <Route index element={<AdminDashboard />} />
 
               <Route
                 path="produtos"

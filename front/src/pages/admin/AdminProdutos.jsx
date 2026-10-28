@@ -20,8 +20,6 @@ import {
 
 import { apiFetch } from "../../services/api.js";
 
-const API_URL = import.meta.env.VITE_API_URL;
-
 const currency = (value) =>
   new Intl.NumberFormat("pt-BR", {
     style: "currency",
@@ -67,10 +65,10 @@ function ProductModal({
   });
 
   const [slugManual, setSlugManual] = useState(Boolean(product?.slug));
-  const [imagem, setImagem] = useState(null);
-  const [imagemPreview, setImagemPreview] = useState(
-    product?.imagens?.[0]?.url || ""
-  );
+  const [imagens, setImagens] = useState([]);
+  const [imagensPreview, setImagensPreview] = useState([]);
+  const imagensExistentes = product?.imagens || [];
+
 
   const alternarMaterial = (materialId) => {
     setForm((current) => ({
@@ -110,7 +108,7 @@ function ProductModal({
       preco: Number(form.preco),
       estoque: Number(form.estoque),
       materialIds: form.materialIds,
-      imagem,
+      imagens,
     });
   }
 
@@ -161,35 +159,77 @@ function ProductModal({
         )}
 
         <form onSubmit={submit} className="mt-6 space-y-5">
-          <label className="block">
+          <div>
             <span className="mb-1.5 block text-xs font-medium text-[#615848]">
-              Imagem do produto
+              Imagens do produto
             </span>
             <div className="rounded-xl border border-dashed border-[#d8c6a6] bg-white p-4">
-              {imagemPreview && (
-                <img
-                  src={imagemPreview}
-                  alt={`Prévia de ${form.nome || "produto"}`}
-                  className="mb-4 h-40 w-full rounded-lg object-cover"
-                />
+              {(imagensExistentes.length > 0 || imagensPreview.length > 0) && (
+                <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3">
+                  {imagensExistentes.map((imagem, index) => (
+                    <div key={imagem.id || imagem.url || index} className="relative">
+                      <img
+                        src={imagem.url}
+                        alt={`Imagem atual ${index + 1} de ${form.nome || "produto"}`}
+                        className="aspect-square w-full rounded-lg border border-[#e9dcc4] object-cover"
+                      />
+                      {index === 0 && (
+                        <span className="absolute bottom-2 left-2 rounded-md bg-[#fcfaf5]/95 px-2 py-1 text-[10px] text-[#615848]">
+                          Imagem atual
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                  {imagensPreview.map((preview, index) => (
+                    <div key={`${preview}-${index}`} className="relative">
+                      <img
+                        src={preview}
+                        alt={`Nova imagem ${index + 1}`}
+                        className="aspect-square w-full rounded-lg border border-[#e9dcc4] object-cover"
+                      />
+                      <button
+                        type="button"
+                        disabled={saving}
+                        onClick={() => {
+                          URL.revokeObjectURL(imagensPreview[index]);
+                          setImagens((atuais) => atuais.filter((_, i) => i !== index));
+                          setImagensPreview((atuais) => atuais.filter((_, i) => i !== index));
+                        }}
+                        className="absolute right-1 top-1 rounded-lg bg-white/95 px-2 py-1 text-[10px] text-red-600 shadow"
+                      >
+                        Remover
+                      </button>
+                      {imagensExistentes.length === 0 && index === 0 && (
+                        <span className="absolute bottom-2 left-2 rounded-md bg-[#fcfaf5]/95 px-2 py-1 text-[10px] text-[#615848]">
+                          Primeira imagem
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
               <input
                 type="file"
                 accept="image/*"
+                multiple
                 disabled={saving}
                 onChange={(event) => {
-                  const arquivo = event.target.files?.[0];
-                  if (!arquivo) return;
-                  setImagem(arquivo);
-                  setImagemPreview(URL.createObjectURL(arquivo));
+                  const arquivos = Array.from(event.target.files || []);
+                  if (!arquivos.length) return;
+                  setImagens((atuais) => [...atuais, ...arquivos]);
+                  setImagensPreview((atuais) => [
+                    ...atuais,
+                    ...arquivos.map((arquivo) => URL.createObjectURL(arquivo)),
+                  ]);
+                  event.target.value = "";
                 }}
                 className="w-full text-xs text-[#615848] file:mr-3 file:rounded-lg file:border-0 file:bg-[#f1e8d8] file:px-3 file:py-2 file:text-xs file:font-medium file:text-[#5b4a2d]"
               />
-              <p className="mt-2 text-[10px] text-[#978b78]">
-                Selecione uma imagem da peça. Ao editar, deixe vazio para manter a imagem atual.
+              <p className="mt-2 text-[10px] leading-5 text-[#978b78]">
+                Selecione uma ou várias imagens. Ao editar, as imagens atuais são mantidas; as novas serão enviadas junto com os dados do produto.
               </p>
             </div>
-          </label>
+          </div>
 
           <fieldset disabled={saving}>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -541,9 +581,9 @@ export default function AdminProdutos() {
         JSON.stringify(dados.materialIds || [])
       );
 
-      if (dados.imagem) {
-        formData.append("imagem", dados.imagem);
-      }
+      (dados.imagens || []).forEach((imagem) => {
+        formData.append("imagens", imagem);
+      });
 
       if (modalProduct) {
         const resultado = await apiFetch(

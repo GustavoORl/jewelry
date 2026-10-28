@@ -40,7 +40,7 @@ export default function Promocoes() {
           <article className="relative flex min-h-[300px] overflow-hidden rounded-[20px] bg-[#241F16] text-white md:h-[312px]">
             <div className="relative z-10 w-full p-6 sm:p-8">
               <span className="text-[10px] font-semibold uppercase tracking-[2px] text-[#C9C0B1]">
-                Clube Aurelia
+                Clube Aurora
               </span>
 
               <h2 className="mt-2 max-w-[330px] font-serif text-2xl leading-tight sm:text-[27px]">

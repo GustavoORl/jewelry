@@ -118,7 +118,7 @@ function normalizarProduto(produto) {
     categoriaNome: nomeCategoria,
     ativo: produto.ativo !== false,
     descricao: produto.descricao || "",
-    marca: produto.marca || "AURELIA",
+    marca: produto.marca || "AURORA",
     desconto: produto.desconto || "",
     avaliacoes: produto.avaliacoes ?? 0,
     precoAntigo: produto.precoAntigo ?? null,

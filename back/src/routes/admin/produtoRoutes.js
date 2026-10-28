@@ -15,9 +15,9 @@ const router = Router();
 router.get("/", obterProdutos);
 router.get("/:id", obterProdutoPorId);
 
-router.post("/", uploadImagem.single("imagem"), cadastrarProduto);
+router.post("/", uploadImagem.array("imagens", 10), cadastrarProduto);
 
-router.patch("/:id", uploadImagem.single("imagem"), atualizarProdutoController);
+router.patch("/:id", uploadImagem.array("imagens", 10), atualizarProdutoController);
 router.patch("/:id/status", atualizarStatusProdutoController);
 
 router.delete("/:id", excluirProdutoController);

@@ -1,3 +1,4 @@
+
 import multer from "multer";
 
 const tiposPermitidos = [
@@ -8,10 +9,12 @@ const tiposPermitidos = [
 
 export const uploadImagem = multer({
   storage: multer.memoryStorage(),
+
   limits: {
-    fileSize: 4 * 1024 * 1024,
-    files: 1,
+    fileSize: 4 * 1024 * 1024, // 4 MB por imagem
+    files: 10, // Até 10 imagens por requisição
   },
+
   fileFilter: (req, arquivo, callback) => {
     if (!tiposPermitidos.includes(arquivo.mimetype)) {
       return callback(

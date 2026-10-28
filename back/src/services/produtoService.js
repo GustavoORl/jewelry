@@ -146,17 +146,21 @@ async function validarMateriais(tx, materialIds) {
 }
 
 // Cadastra um produto e seus materiais.
-export async function criarProduto(dados, arquivo) {
+
+export async function criarProduto(dados, arquivos = []) {
   const dadosValidados = esquemaProduto.parse({
     ...dados,
     materialIds: normalizarMaterialIds(dados.materialIds),
   });
 
-  let imagemEnviada = null;
+  const imagensEnviadas = [];
 
   try {
-    if (arquivo) {
-      imagemEnviada = await enviarImagem(arquivo, "produtos");
+    // Envia as imagens individualmente ao Supabase.
+    for (const arquivo of arquivos) {
+      imagensEnviadas.push(
+        await enviarImagem(arquivo, "produtos")
+      );
     }
 
     const produto = await prisma.$transaction(async (tx) => {
@@ -174,58 +178,60 @@ export async function criarProduto(dados, arquivo) {
           materiais: {
             create: dadosValidados.materialIds.map((materialId) => ({
               material: {
-                connect: {
-                  id: materialId,
-                },
+                connect: { id: materialId },
               },
             })),
           },
         },
       });
 
-      if (imagemEnviada) {
-        await tx.imagemProduto.create({
-          data: {
+      if (imagensEnviadas.length > 0) {
+        await tx.imagemProduto.createMany({
+          data: imagensEnviadas.map((imagem, indice) => ({
             produtoId: novoProduto.id,
-            url: imagemEnviada.url,
+            url: imagem.url,
             textoAlternativo: dadosValidados.nome,
-            posicao: 0,
-          },
+            posicao: indice,
+          })),
         });
       }
 
       return tx.produto.findUnique({
-        where: {
-          id: novoProduto.id,
-        },
+        where: { id: novoProduto.id },
         include: incluirDetalhesProduto,
       });
     });
 
     return produto;
   } catch (erro) {
-    if (imagemEnviada) {
-      try {
-        await excluirImagem(imagemEnviada.caminho);
-      } catch (erroStorage) {
+    // Remove todos os arquivos enviados caso o cadastro falhe.
+    const resultados = await Promise.allSettled(
+      imagensEnviadas.map((imagem) =>
+        excluirImagem(imagem.caminho)
+      )
+    );
+
+    resultados.forEach((resultado) => {
+      if (resultado.status === "rejected") {
         console.error(
-          "Não foi possível remover a imagem após a falha no cadastro:",
-          erroStorage
+          "Falha ao limpar imagem após erro no cadastro:",
+          resultado.reason
         );
       }
-    }
+    });
 
     if (erro.code === "P2002") {
       throw new Error("Já existe um produto com esse slug.");
     }
 
     if (erro.code === "P2003") {
-      throw new Error("A categoria informada não existe.");
+      throw new Error("A categoria ou um material informado não existe.");
     }
 
     throw erro;
   }
 }
+
 
 // Lista os produtos ativos.
 export async function listarProdutos() {
@@ -271,7 +277,8 @@ export async function excluirProduto(id) {
 }
 
 // Atualiza os dados do produto, os materiais e, opcionalmente, a imagem principal.
-export async function atualizarProduto(id, dados, arquivo) {
+
+export async function atualizarProduto(id, dados, arquivos = []) {
   if (!id) {
     throw new Error("O ID do produto é obrigatório.");
   }
@@ -285,14 +292,13 @@ export async function atualizarProduto(id, dados, arquivo) {
   const dadosValidados = esquemaAtualizacaoProduto.parse({
     ...dados,
     ...(dados.materialIds !== undefined
-      ? { materialIds: normalizarMaterialIds(dados.materialIds) }
+      ? {
+          materialIds: normalizarMaterialIds(dados.materialIds),
+        }
       : {}),
   });
 
-  const {
-    materialIds,
-    ...camposProduto
-  } = dadosValidados;
+  const { materialIds, ...camposProduto } = dadosValidados;
 
   const produtoAtualizado = Object.fromEntries(
     Object.entries(camposProduto).filter(
@@ -301,27 +307,26 @@ export async function atualizarProduto(id, dados, arquivo) {
   );
 
   const atualizarMateriais = materialIds !== undefined;
+  const novasImagens = Array.isArray(arquivos) ? arquivos : [];
 
   if (
     Object.keys(produtoAtualizado).length === 0 &&
     !atualizarMateriais &&
-    !arquivo
+    novasImagens.length === 0
   ) {
     throw new Error(
-      "Informe dados, materiais ou uma nova imagem para atualizar."
+      "Informe dados, materiais ou novas imagens para atualizar."
     );
   }
 
-  const imagemPrincipal = produtoExistente.imagens?.find(
-    (imagem) => imagem.posicao === 0
-  );
-
-  let novaImagem = null;
-  let atualizacaoConcluida = false;
+  const imagensEnviadas = [];
 
   try {
-    if (arquivo) {
-      novaImagem = await enviarImagem(arquivo, "produtos");
+    // Faz upload das novas imagens.
+    for (const arquivo of novasImagens) {
+      imagensEnviadas.push(
+        await enviarImagem(arquivo, "produtos")
+      );
     }
 
     const produto = await prisma.$transaction(async (tx) => {
@@ -331,18 +336,14 @@ export async function atualizarProduto(id, dados, arquivo) {
 
       if (Object.keys(produtoAtualizado).length > 0) {
         await tx.produto.update({
-          where: {
-            id,
-          },
+          where: { id },
           data: produtoAtualizado,
         });
       }
 
       if (atualizarMateriais) {
         await tx.produtoMaterial.deleteMany({
-          where: {
-            produtoId: id,
-          },
+          where: { produtoId: id },
         });
 
         if (materialIds.length > 0) {
@@ -355,65 +356,50 @@ export async function atualizarProduto(id, dados, arquivo) {
         }
       }
 
-      if (novaImagem) {
+      if (imagensEnviadas.length > 0) {
+        const ultimaImagem = await tx.imagemProduto.findFirst({
+          where: { produtoId: id },
+          orderBy: { posicao: "desc" },
+          select: { posicao: true },
+        });
+
+        const proximaPosicao = (ultimaImagem?.posicao ?? -1) + 1;
         const textoAlternativo =
           dadosValidados.nome ?? produtoExistente.nome;
 
-        if (imagemPrincipal) {
-          await tx.imagemProduto.update({
-            where: {
-              id: imagemPrincipal.id,
-            },
-            data: {
-              url: novaImagem.url,
-              textoAlternativo,
-            },
-          });
-        } else {
-          await tx.imagemProduto.create({
-            data: {
-              produtoId: id,
-              url: novaImagem.url,
-              textoAlternativo,
-              posicao: 0,
-            },
-          });
-        }
+        await tx.imagemProduto.createMany({
+          data: imagensEnviadas.map((imagem, indice) => ({
+            produtoId: id,
+            url: imagem.url,
+            textoAlternativo,
+            posicao: proximaPosicao + indice,
+          })),
+        });
       }
 
       return tx.produto.findUnique({
-        where: {
-          id,
-        },
+        where: { id },
         include: incluirDetalhesProduto,
       });
     });
 
-    atualizacaoConcluida = true;
-
-    if (novaImagem && imagemPrincipal) {
-      try {
-        await removerImagemDoStorage(imagemPrincipal.url);
-      } catch (erroStorage) {
-        console.error(
-          "Produto atualizado, mas não foi possível remover a imagem antiga:",
-          erroStorage
-        );
-      }
-    }
-
     return produto;
   } catch (erro) {
-    if (novaImagem && !atualizacaoConcluida) {
-      try {
-        await excluirImagem(novaImagem.caminho);
-      } catch (erroStorage) {
+    // Remove os arquivos enviados se a atualização não for concluída.
+    const resultados = await Promise.allSettled(
+      imagensEnviadas.map((imagem) =>
+        excluirImagem(imagem.caminho)
+      )
+    );
+
+    resultados.forEach((resultado) => {
+      if (resultado.status === "rejected") {
         console.error(
-          "Não foi possível remover a nova imagem após a falha na atualização:",
-          erroStorage
+          "Falha ao limpar imagem após erro na atualização:",
+          resultado.reason
         );
       }
-    }
+    });
 
     if (erro.code === "P2002") {
       throw new Error("Já existe um produto com esse slug.");
@@ -426,6 +412,7 @@ export async function atualizarProduto(id, dados, arquivo) {
     throw erro;
   }
 }
+
 
 // Ativa ou desativa um produto sem excluí-lo do banco.
 export async function atualizarStatusProdutoService(id, ativo) {
