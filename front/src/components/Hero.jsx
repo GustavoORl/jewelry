@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 import { apiFetch } from "../services/api.js";
-import { ocultarCapa } from "../utils/loadingScreen.js";
+import { ocultarCapa } from "../utils/LoadingScreen.js";
 
 const imagemPadrao =
   "https://images.unsplash.com/photo-1617038220319-276d3cfab638?auto=format&fit=crop&w=600&q=80";
