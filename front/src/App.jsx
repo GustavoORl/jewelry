@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
 import { AuthProvider } from "./contexts/AuthContext.jsx";
+
 import Layout from "./layout/Layout.jsx";
 
 import Home from "./pages/Home.jsx";
@@ -9,6 +10,7 @@ import ListagemProdutos from "./pages/ListagemProdutos.jsx";
 import ProdutoDetalhado from "./pages/ProdutoDetalhado.jsx";
 
 import RotaProtegida from "./components/RotaProtegida.jsx";
+
 
 import AdminDashboard from "./pages/admin/AdminDashboard.jsx";
 import AdminProdutos from "./pages/admin/AdminProdutos.jsx";
@@ -21,6 +23,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <AuthProvider>
+
         <Routes>
           {/* Loja pública */}
           <Route element={<Layout />}>
