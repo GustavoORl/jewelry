@@ -67,6 +67,15 @@ await prisma.$transaction(
   async (tx) => {
     const agora = new Date();
 
+    await tx.usuario.update({
+      where: {
+        id: usuario.id,
+      },
+      data: {
+        ultimoAcessoEm: agora,
+      }
+    });
+
     // Busca as sessões ainda válidas deste usuário.
     const sessoesAtivas = await tx.sessaoRefreshToken.findMany({
       where: {

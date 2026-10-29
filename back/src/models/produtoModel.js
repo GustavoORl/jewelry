@@ -50,6 +50,15 @@ export async function listarProdutosModel() {
   });
 }
 
+export async function listarProdutosAdmin() {
+  return prisma.produto.findMany({
+    include: incluirDetalhesProduto,
+    orderBy: {
+      criadoEm: "desc",
+    },
+  });
+}
+
 export async function buscarProdutoPorIdModel(id) {
   return prisma.produto.findUnique({
     where: { id },

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import {
   cadastrarProduto,
-  obterProdutos,
+  obterProdutosAdmin,
   obterProdutoPorId,
   excluirProdutoController,
   atualizarProdutoController,
@@ -12,7 +12,7 @@ import { uploadImagem } from "../../middlewares/uploadMiddleware.js";
 
 const router = Router();
 
-router.get("/", obterProdutos);
+router.get("/", obterProdutosAdmin);
 router.get("/:id", obterProdutoPorId);
 
 router.post("/", uploadImagem.array("imagens", 10), cadastrarProduto);

@@ -9,6 +9,9 @@ import produtoPublicoRoutes from "./routes/public/produtoRoutes.js";
 import categoriaPublicaRoutes from "./routes/public/categoriaRoutes.js";
 import materialPublicoRoutes from "./routes/public/materialRoutes.js";
 
+import sacolaUserRoutes from "./routes/user/sacolaRoutes.js"
+import pedidoUserRoutes from "./routes/user/pedidoRoutes.js"
+
 import adminRoutes from "./routes/admin/index.js";
 
 const app = express();
@@ -44,6 +47,10 @@ app.use("/", authRoutes);
 app.use("/produtos", produtoPublicoRoutes);
 app.use("/categorias", categoriaPublicaRoutes);
 app.use("/materiais", materialPublicoRoutes);
+
+// Rotas Usuários logados
+app.use("/sacola",sacolaUserRoutes);
+app.use("/pedidos", pedidoUserRoutes);
 
 // Rotas administrativas
 app.use("/admin", adminRoutes);

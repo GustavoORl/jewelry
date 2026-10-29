@@ -7,7 +7,8 @@ import {
   buscarProdutoPorId,
   excluirProduto,
   atualizarProduto,
-  atualizarStatusProdutoService
+  atualizarStatusProdutoService,
+  listarAllProdutosAdmin
 } from "../../services/produtoService.js";
 
 export async function cadastrarProduto(req, res) {
@@ -88,6 +89,25 @@ export async function obterProdutos(req, res) {
     });
   }
 }
+
+export async function obterProdutosAdmin(req, res) {
+  try {
+    const produtos = await listarAllProdutosAdmin();
+
+    return res.status(200).json({
+      sucesso: true,
+      produtos,
+    });
+  } catch (erro) {
+    console.error(erro);
+
+    return res.status(500).json({
+      sucesso: false,
+      mensagem: "Erro ao consultar produtos.",
+    });
+  }
+}
+
 
 export async function obterProdutoPorId(req, res) {
   try {

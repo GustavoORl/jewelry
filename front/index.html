@@ -1,23 +1,229 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>jewelry</title>
-  </head>
-  <body>
-    
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <meta name="theme-color" content="#FAF9F5" />
+
+  <title>AURORA | Marketplace de Joias</title>
+
+  <script>
+    if (window.location.pathname === "/") {
+      document.documentElement.classList.add("show-initial-loader");
+    }
+  </script>
+
+  <style>
+    *,
+    *::before,
+    *::after {
+      box-sizing: border-box;
+    }
+
+    html,
+    body {
+      margin: 0;
+      min-height: 100%;
+    }
+
+    body {
+      background: #FAF9F5;
+    }
+
+
+    /* CAPA DE CARREGAMENTO */
+    #loading-screen {
+      position: fixed;
+      inset: 0;
+      z-index: 999999;
+
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+
+      padding: 24px;
+
+      background: #FAF9F5;
+      color: #211C14;
+      font-family: Georgia, "Times New Roman", serif;
+
+      opacity: 1;
+      visibility: visible;
+
+      transition:
+        opacity 500ms ease,
+        visibility 500ms ease;
+    }
+
+    html.show-initial-loader #loading-screen {
+      display: flex;
+    }
+
+    .loading-brand {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .loading-logo {
+      display: grid;
+      place-items: center;
+
+      width: 80px;
+      height: 80px;
+
+      border: 1px solid #B9975B;
+      border-radius: 50%;
+
+      background: #211C14;
+      color: #E9DCC4;
+
+      font-size: 44px;
+      font-weight: normal;
+
+      animation: logo-appear 800ms ease both;
+    }
+
+    .loading-brand h1 {
+      margin: 24px 0 0;
+
+      font-size: 30px;
+      font-weight: normal;
+      letter-spacing: 0.22em;
+
+      animation: text-appear 700ms ease both;
+    }
+
+    .loading-brand p {
+      margin: 10px 0 0;
+    }
+
+    .loading-brand p,
+    .loading-progress p,
+    .loading-footer {
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 9px;
+      line-height: 1.6;
+      letter-spacing: 0.2em;
+      text-align: center;
+    }
+
+    .loading-brand p,
+    .loading-progress p {
+      color: #968052;
+    }
+
+    /* BARRA DE PROGRESSO */
+    .loading-progress {
+      width: 100%;
+      max-width: 180px;
+      margin-top: 48px;
+      text-align: center;
+    }
+
+    .loading-track {
+      width: 100%;
+      height: 2px;
+      overflow: hidden;
+
+      background: #E9DCC4;
+    }
+
+    .loading-bar {
+      width: 38%;
+      height: 100%;
+
+      background: #B9975B;
+
+      transform: translateX(-110%);
+      animation: loading-progress 1.5s ease-in-out infinite;
+      will-change: transform;
+    }
+
+    .loading-progress p {
+      margin: 16px 0 0;
+      font-size: 8px;
+      white-space: nowrap;
+    }
+
+    /* RODAPÉ DA CAPA */
+    .loading-footer {
+      position: absolute;
+      right: 16px;
+      bottom: 28px;
+      left: 16px;
+
+      color: #B5A77F;
+    }
+
+    /* ANIMAÇÕES */
+    @keyframes loading-progress {
+      0% {
+        transform: translateX(-110%);
+      }
+
+      100% {
+        transform: translateX(370%);
+      }
+    }
+
+    @keyframes logo-appear {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @keyframes text-appear {
+      from {
+        opacity: 0;
+      }
+
+      to {
+        opacity: 1;
+      }
+    }
+
+    /* ACESSIBILIDADE */
+    @media (prefers-reduced-motion: reduce) {
+
+      .loading-logo,
+      .loading-brand h1 {
+        animation: none;
+      }
+
+      .loading-bar {
+        animation-duration: 3s;
+      }
+    }
+  </style>
+</head>
+
 <body>
   <div id="loading-screen">
     <div class="loading-brand">
       <div class="loading-logo">A</div>
+
       <h1>AURORA</h1>
+
       <p>MARKETPLACE DE JOIAS</p>
     </div>
 
     <div class="loading-progress">
-      <div class="loading-bar"></div>
+      <div class="loading-track">
+        <div class="loading-bar"></div>
+      </div>
+
       <p>PREPARANDO SUA EXPERIÊNCIA</p>
     </div>
 
@@ -29,89 +235,6 @@
   <div id="root"></div>
 
   <script type="module" src="/src/main.jsx"></script>
-
-  <style>
-    #loading-screen {
-      position: fixed;
-      inset: 0;
-      z-index: 999999;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      background: #FAF9F5;
-      color: #211C14;
-      font-family: Georgia, serif;
-    }
-
-    .loading-brand {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-
-    .loading-logo {
-      display: grid;
-      place-items: center;
-      width: 80px;
-      height: 80px;
-      border: 1px solid #B9975B;
-      border-radius: 50%;
-      background: #211C14;
-      color: #E9DCC4;
-      font-size: 44px;
-    }
-
-    .loading-brand h1 {
-      margin: 28px 0 0;
-      font-size: 30px;
-      font-weight: normal;
-      letter-spacing: 0.18em;
-    }
-
-    .loading-brand p,
-    .loading-progress p,
-    .loading-footer {
-      font-family: Arial, sans-serif;
-      font-size: 9px;
-      letter-spacing: 0.25em;
-      color: #968052;
-    }
-
-    .loading-progress {
-      margin-top: 48px;
-      text-align: center;
-    }
-
-    .loading-progress > div {
-      width: 144px;
-      height: 2px;
-      overflow: hidden;
-      background: #E9DCC4;
-    }
-
-    .loading-bar {
-      width: 35%;
-      height: 100%;
-      background: #B9975B;
-      animation: loading 1.4s ease-in-out infinite alternate;
-    }
-
-    .loading-footer {
-      position: absolute;
-      bottom: 32px;
-      color: #B5A77F;
-    }
-
-    #loading-screen {
-  transition: opacity 500ms ease;
-}
-
-    @keyframes loading {
-      from { transform: translateX(0); }
-      to { transform: translateX(185%); }
-    }
-  </style>
 </body>
 
 </html>

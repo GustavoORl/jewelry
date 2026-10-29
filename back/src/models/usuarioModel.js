@@ -32,6 +32,7 @@ export async function listarUsuariosModel() {
       tipo: true,
       ativo: true,
       criadoEm: true,
+      ultimoAcessoEm: true,
     },
     orderBy: {
       criadoEm: "desc",

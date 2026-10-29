@@ -8,6 +8,7 @@ import {
   buscarProdutoPorIdModel,
   excluirProdutoModel,
   atualizarStatusProdutoModel,
+  listarProdutosAdmin
 } from "../models/produtoModel.js";
 
 const incluirDetalhesProduto = {
@@ -237,6 +238,12 @@ export async function criarProduto(dados, arquivos = []) {
 export async function listarProdutos() {
   return listarProdutosModel();
 }
+
+// Lista todos os produtos.
+export async function listarAllProdutosAdmin() {
+  return listarProdutosAdmin();
+}
+
 
 // Busca um produto pelo ID.
 export async function buscarProdutoPorId(id) {

@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 
 import { apiFetch } from "../services/api.js";
+
 import { ocultarCapa } from "../utils/LoadingScreen.js";
 
 const imagemPadrao =

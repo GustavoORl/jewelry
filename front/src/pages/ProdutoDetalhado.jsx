@@ -12,7 +12,7 @@ import {
   Truck,
 } from "lucide-react";
 
-import { apiFetch } from "../services/api";
+import { apiFetch } from "../services/api.js";
 
 const imagemPadrao =
   "https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=1200&q=85";
@@ -30,18 +30,18 @@ function extrairProduto(resultado) {
 function normalizarImagens(produto) {
   const imagens = Array.isArray(produto.imagens)
     ? produto.imagens
-        .map((imagem) => {
-          if (typeof imagem === "string") return imagem;
+      .map((imagem) => {
+        if (typeof imagem === "string") return imagem;
 
-          return (
-            imagem?.url ||
-            imagem?.urlImagem ||
-            imagem?.caminho ||
-            imagem?.imagem ||
-            null
-          );
-        })
-        .filter(Boolean)
+        return (
+          imagem?.url ||
+          imagem?.urlImagem ||
+          imagem?.caminho ||
+          imagem?.imagem ||
+          null
+        );
+      })
+      .filter(Boolean)
     : [];
 
   const imagemPrincipal =
@@ -107,6 +107,8 @@ export default function ProdutoDetalhado() {
   const [quantidade, setQuantidade] = useState(1);
   const [favoritado, setFavoritado] = useState(false);
   const [adicionado, setAdicionado] = useState(false);
+  const [adicionando, setAdicionando] = useState(false);
+  const [erroSacola, setErroSacola] = useState("");
 
   useEffect(() => {
     let ativo = true;
@@ -139,7 +141,7 @@ export default function ProdutoDetalhado() {
         if (ativo) {
           setErro(
             erroApi.message ||
-              "Não foi possível carregar os dados deste produto."
+            "Não foi possível carregar os dados deste produto."
           );
         }
       } finally {
@@ -164,8 +166,8 @@ export default function ProdutoDetalhado() {
 
     const atualizados = jaFavoritado
       ? favoritos.filter(
-          (favorito) => String(favorito) !== String(produto.id)
-        )
+        (favorito) => String(favorito) !== String(produto.id)
+      )
       : [...favoritos, produto.id];
 
     localStorage.setItem(
@@ -177,42 +179,36 @@ export default function ProdutoDetalhado() {
     window.dispatchEvent(new Event("favoritosAtualizados"));
   }
 
-  function adicionarSacola() {
-    if (!produto) return;
+  
+async function adicionarSacola() {
+  if (!produto || adicionando || esgotado) return;
 
-    try {
-      const itens = JSON.parse(
-        localStorage.getItem("aurelia_carrinho") || "[]"
-      );
+  setAdicionando(true);
+  setAdicionado(false);
+  setErroSacola("");
 
-      if (!Array.isArray(itens)) {
-        throw new Error("Formato de sacola inválido.");
-      }
+  try {
+    await apiFetch("/sacola/itens", {
+      method: "POST",
+      body: JSON.stringify({
+        produtoId: produto.id,
+        quantidade,
+      }),
+    });
 
-      const existente = itens.find(
-        (item) => String(item.produtoId) === String(produto.id)
-      );
+    setAdicionado(true);
 
-      if (existente) {
-        existente.quantidade =
-          Number(existente.quantidade || 0) + quantidade;
-      } else {
-        itens.push({
-          produtoId: produto.id,
-          nome: produto.nome,
-          preco: Number(produto.preco),
-          imagem: imagens[imagemSelecionada],
-          quantidade,
-        });
-      }
-
-      localStorage.setItem("aurelia_carrinho", JSON.stringify(itens));
-      window.dispatchEvent(new Event("carrinhoAtualizado"));
-      setAdicionado(true);
-    } catch {
-      setErro("Não foi possível adicionar o produto à sacola.");
-    }
+    window.dispatchEvent(new Event("carrinhoAtualizado"));
+  } catch (erroApi) {
+    setErroSacola(
+      erroApi.message ||
+        "Não foi possível adicionar o produto à sacola."
+    );
+  } finally {
+    setAdicionando(false);
   }
+}
+
 
   if (carregando) {
     return (
@@ -268,8 +264,8 @@ export default function ProdutoDetalhado() {
     typeof produto.categoria === "string"
       ? produto.categoria
       : produto.categoria?.nome ||
-        produto.categoria?.nomeCategoria ||
-        "";
+      produto.categoria?.nomeCategoria ||
+      "";
 
   const preco = Number(produto.preco);
   const precoOriginal = Number(
@@ -364,11 +360,10 @@ export default function ProdutoDetalhado() {
                     type="button"
                     onClick={() => setImagemSelecionada(indice)}
                     aria-label={`Ver imagem ${indice + 1}`}
-                    className={`overflow-hidden border transition ${
-                      imagemSelecionada === indice
-                        ? "border-[#968052]"
-                        : "border-transparent opacity-70 hover:opacity-100"
-                    }`}
+                    className={`overflow-hidden border transition ${imagemSelecionada === indice
+                      ? "border-[#968052]"
+                      : "border-transparent opacity-70 hover:opacity-100"
+                      }`}
                   >
                     <img
                       src={imagem}
@@ -505,20 +500,41 @@ export default function ProdutoDetalhado() {
             <button
               type="button"
               onClick={adicionarSacola}
-              disabled={esgotado}
+              disabled={esgotado || adicionando}
               className="mt-5 flex min-h-14 w-full items-center justify-center gap-3 bg-[#211C14] px-6 py-4 text-xs uppercase tracking-[0.18em] text-white transition hover:bg-[#968052] disabled:cursor-not-allowed disabled:bg-[#B9B1A5]"
             >
-              {adicionado ? <Check size={18} /> : <ShoppingBag size={18} />}
+              {adicionando ? (
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/40 border-t-white" />
+              ) : adicionado ? (
+                <Check size={18} />
+              ) : (
+                <ShoppingBag size={18} />
+              )}
+
               {esgotado
                 ? "Produto indisponível"
-                : adicionado
-                  ? "Adicionado à sacola"
-                  : "Adicionar à sacola"}
+                : adicionando
+                  ? "Adicionando..."
+                  : adicionado
+                    ? "Adicionado à sacola"
+                    : "Adicionar à sacola"}
             </button>
 
             {adicionado && (
-              <p className="mt-3 text-center text-sm text-[#71654F]">
-                Produto adicionado à sacola.
+              <p
+                role="status"
+                className="mt-3 text-center text-sm text-[#71654F]"
+              >
+                Produto adicionado à sacola com sucesso.
+              </p>
+            )}
+
+            {erroSacola && (
+              <p
+                role="alert"
+                className="mt-3 text-center text-sm text-red-700"
+              >
+                {erroSacola}
               </p>
             )}
 
