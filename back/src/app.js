@@ -8,10 +8,12 @@ import authRoutes from "./routes/public/authRoutes.js";
 import produtoPublicoRoutes from "./routes/public/produtoRoutes.js";
 import categoriaPublicaRoutes from "./routes/public/categoriaRoutes.js";
 import materialPublicoRoutes from "./routes/public/materialRoutes.js";
+import webhookRoutes from "./routes/public/webhookRoutes.js"
 
 import sacolaUserRoutes from "./routes/user/sacolaRoutes.js"
 import pedidoUserRoutes from "./routes/user/pedidoRoutes.js"
 import favoritoUserRoutes from "./routes/user/favoritoRoutes.js"
+import pagamentoUserRoutes from "./routes/user/pagamentoRoutes.js";
 
 import adminRoutes from "./routes/admin/index.js";
 
@@ -36,6 +38,8 @@ app.use(
 app.use(express.json());
 app.use(cookieParser());
 
+app.use("/webhooks", webhookRoutes);
+
 app.get("/health", (req, res) => {
   res.status(200).json({
     sucesso: true,
@@ -53,6 +57,7 @@ app.use("/materiais", materialPublicoRoutes);
 app.use("/sacola",sacolaUserRoutes);
 app.use("/pedidos", pedidoUserRoutes);
 app.use("/favoritos", favoritoUserRoutes);
+app.use("/pagamentos", pagamentoUserRoutes);
 
 // Rotas administrativas
 app.use("/admin", adminRoutes);

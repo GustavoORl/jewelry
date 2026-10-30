@@ -8,6 +8,7 @@ import produtoRoutes from "./produtoRoutes.js";
 import categoriaRoutes from "./categoriaRoutes.js";
 import materialRoutes from "./materialRoutes.js";
 import pedidoRoutes from "./pedidoRoutes.js"
+import dashboardRoutes from "./dashboardRoutes.js"
 
 const router = Router();
 
@@ -19,5 +20,6 @@ router.use("/produtos", produtoRoutes);
 router.use("/categorias", categoriaRoutes);
 router.use("/materiais", materialRoutes);
 router.use("/pedidos", pedidoRoutes)
+router.use("/dashboard", dashboardRoutes);
 
 export default router;

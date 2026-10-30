@@ -7,22 +7,22 @@ datasource db {
 }
 
 model Usuario {
-  id           String      @id @default(cuid())
-  nome         String
-  email        String      @unique
-  senhaHash    String
-  cpfCnpj      String?     @unique
-  telefone     String?
-  tipo         TipoUsuario @default(CLIENTE)
-  ativo        Boolean     @default(true)
-  criadoEm     DateTime    @default(now())
-  atualizadoEm DateTime    @updatedAt
-  ultimoAcessoEm DateTime?
-  carrinho     Carrinho?
-  enderecos    Endereco[]
-  pedidos      Pedido[]
+  id                  String               @id @default(cuid())
+  nome                String
+  email               String               @unique
+  senhaHash           String
+  cpfCnpj             String?              @unique
+  telefone            String?
+  tipo                TipoUsuario          @default(CLIENTE)
+  ativo               Boolean              @default(true)
+  criadoEm            DateTime             @default(now())
+  atualizadoEm        DateTime             @updatedAt
+  ultimoAcessoEm      DateTime?
+  carrinho            Carrinho?
+  enderecos           Endereco[]
+  pedidos             Pedido[]
   sessoesRefreshToken SessaoRefreshToken[]
-  favoritos Favorito[]
+  favoritos           Favorito[]
 }
 
 model Endereco {
@@ -84,7 +84,7 @@ model Produto {
   itensPedido   ItemPedido[]
   categoria     Categoria         @relation(fields: [categoriaId], references: [id])
   materiais     ProdutoMaterial[]
-  favoritos Favorito[]
+  favoritos     Favorito[]
 
   @@index([categoriaId])
   @@index([ativo])
@@ -158,6 +158,7 @@ model Pedido {
   atualizadoEm       DateTime     @updatedAt
   itens              ItemPedido[]
   usuario            Usuario      @relation(fields: [usuarioId], references: [id])
+  pagamentos         Pagamento[]
 
   @@index([usuarioId])
   @@index([status])
@@ -192,19 +193,18 @@ enum StatusPedido {
 }
 
 model SessaoRefreshToken {
-  id          String   @id @default(cuid())
-  usuarioId   String
-  tokenHash   String   @unique
-  expiraEm    DateTime
-  revogadoEm  DateTime?
-  criadoEm    DateTime @default(now())
-  
+  id         String    @id @default(cuid())
+  usuarioId  String
+  tokenHash  String    @unique
+  expiraEm   DateTime
+  revogadoEm DateTime?
+  criadoEm   DateTime  @default(now())
+
   usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId])
   @@index([expiraEm])
 }
-
 
 model Favorito {
   usuarioId String
@@ -216,4 +216,53 @@ model Favorito {
 
   @@id([usuarioId, produtoId])
   @@index([produtoId])
+}
+
+enum StatusPagamento {
+  PENDENTE
+  PROCESSANDO
+  APROVADO
+  RECUSADO
+  CANCELADO
+  REEMBOLSADO
+  EXPIRADO
+}
+
+enum MetodoPagamento {
+  PIX
+  CREDITO
+  DEBITO
+  BOLETO
+}
+
+enum ProvedorPagamento {
+  MERCADO_PAGO
+}
+
+model Pagamento {
+  id       String @id @default(cuid())
+  pedidoId String
+
+  provedor ProvedorPagamento @default(MERCADO_PAGO)
+  metodo   MetodoPagamento
+  status   StatusPagamento   @default(PENDENTE)
+
+  valor Decimal @db.Decimal(10, 2)
+
+  provedorPagamentoId String? @unique
+  provedorOrdemId     String?
+
+  referenciaExterna String @unique
+  chaveIdempotencia String @unique
+
+  detalhes Json?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
+
+  @@index([pedidoId])
+  @@index([status])
+  @@index([provedorOrdemId])
 }
