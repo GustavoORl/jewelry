@@ -15,6 +15,7 @@ import Checkout from "./pages/user/Checkout.jsx";
 import PedidoUser from "./pages/user/PedidoUser.jsx";
 import PedidoDetalhado from "./pages/user/PedidoDetalhado.jsx";
 import FavoritoUser from "./pages/user/FavoritoUser.jsx";
+import Pagamento from "./pages/user/Pagamento.jsx";
 
 import RotaProtegida from "./components/RotaProtegida.jsx";
 
@@ -69,6 +70,7 @@ export default function App() {
               <Route path="/pedidos" element={<PedidoUser />} />
               <Route path="/pedidos/:pedidoId" element={<PedidoDetalhado />} />
               <Route path="/favoritos" element={<FavoritoUser />} />
+              <Route path="/pagamento/:pedidoId" element={<Pagamento />}/>
             </Route>
 
             {/* Login */}

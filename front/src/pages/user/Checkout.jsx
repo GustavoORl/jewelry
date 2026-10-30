@@ -54,7 +54,6 @@ export default function Checkout() {
   const [carregando, setCarregando] = useState(true);
   const [enviando, setEnviando] = useState(false);
   const [erro, setErro] = useState("");
-  const [pedidoCriado, setPedidoCriado] = useState(null);
 
   useEffect(() => {
     let ativo = true;
@@ -152,7 +151,7 @@ export default function Checkout() {
         );
       }
 
-      setPedidoCriado(resposta.pedido);
+      navigate(`/pagamento/${resposta.pedido.id}`);
     } catch (error) {
       setErro(error.message || "Não foi possível criar o pedido.");
     } finally {
@@ -167,66 +166,6 @@ export default function Checkout() {
           <LoaderCircle className="animate-spin" size={22} />
           Carregando seu checkout...
         </div>
-      </main>
-    );
-  }
-
-  if (pedidoCriado) {
-    return (
-      <main className="min-h-[65vh] bg-[#FCFAF5] px-4 py-16 text-[#211C14]">
-        <section className="mx-auto max-w-xl border border-[#E9DCC4] bg-white px-6 py-12 text-center sm:px-12">
-          <CheckCircle2
-            className="mx-auto mb-6 text-[#968052]"
-            size={54}
-            strokeWidth={1.2}
-          />
-
-          <p className="text-xs uppercase tracking-[0.25em] text-[#968052]">
-            Pedido registrado
-          </p>
-
-          <h1 className="mt-3 font-serif text-3xl sm:text-4xl">
-            Obrigado pela sua compra!
-          </h1>
-
-          <p className="mt-4 text-sm leading-6 text-[#756C5C]">
-            Seu pedido foi criado e está aguardando a próxima etapa de
-            pagamento.
-          </p>
-
-          <div className="my-8 space-y-3 border-y border-[#E9DCC4] py-5 text-sm">
-            <div className="flex justify-between gap-4">
-              <span className="text-[#756C5C]">Número do pedido</span>
-              <span className="break-all font-medium">
-                {pedidoCriado.id}
-              </span>
-            </div>
-
-            <div className="flex justify-between gap-4">
-              <span className="text-[#756C5C]">Status</span>
-              <span className="font-medium">{pedidoCriado.status}</span>
-            </div>
-
-            <div className="flex justify-between gap-4">
-              <span className="text-[#756C5C]">Total</span>
-              <span className="font-medium">
-                {formatarPreco(pedidoCriado.valorTotal)}
-              </span>
-            </div>
-          </div>
-
-          <p className="mb-6 text-xs leading-5 text-[#756C5C]">
-            Nenhum pagamento foi realizado nesta etapa.
-          </p>
-
-          <Link
-            to="/"
-            className="inline-flex items-center justify-center gap-3 bg-[#211C14] px-6 py-4 text-sm text-white transition hover:bg-[#968052]"
-          >
-            Voltar à loja
-            <ArrowRight size={17} />
-          </Link>
-        </section>
       </main>
     );
   }
