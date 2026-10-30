@@ -461,7 +461,7 @@ export default function Header() {
                                                         Icone: User,
                                                     },
                                                     {
-                                                        to: "/meus-pedidos",
+                                                        to: "/pedidos",
                                                         texto: "Meus pedidos",
                                                         Icone: Package,
                                                     },

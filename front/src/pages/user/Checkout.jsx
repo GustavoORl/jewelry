@@ -1,6 +1,6 @@
 
-import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   ArrowLeft,
   ArrowRight,
@@ -44,6 +44,10 @@ const enderecoInicial = {
 
 export default function Checkout() {
   const navigate = useNavigate();
+  const location = useLocation();
+
+  // IDs dos itens da sacola selecionados pelo usuário.
+  const idsSelecionados = location.state?.itensSelecionados ?? [];
 
   const [sacola, setSacola] = useState(null);
   const [endereco, setEndereco] = useState(enderecoInicial);
@@ -81,6 +85,31 @@ export default function Checkout() {
     };
   }, []);
 
+  // Mantém somente os itens selecionados na sacola.
+  const itensSelecionados = useMemo(() => {
+    if (!sacola?.itens || !idsSelecionados.length) return [];
+
+    const ids = new Set(idsSelecionados);
+
+    return sacola.itens.filter((item) => ids.has(item.id));
+  }, [sacola, idsSelecionados]);
+
+  // Calcula os valores exclusivamente dos itens selecionados.
+  const total = useMemo(
+    () =>
+      itensSelecionados.reduce(
+        (soma, item) => soma + Number(item.subtotal || 0),
+        0
+      ),
+    [itensSelecionados]
+  );
+
+  const temItens = itensSelecionados.length > 0;
+
+  const indisponivel = itensSelecionados.some(
+    (item) => !item.disponivel
+  );
+
   function alterarEndereco(evento) {
     const { name, value } = evento.target;
 
@@ -94,13 +123,15 @@ export default function Checkout() {
     evento.preventDefault();
     setErro("");
 
-    if (!sacola?.itens?.length) {
-      setErro("Sua sacola está vazia.");
+    if (!temItens) {
+      setErro("Nenhum produto foi selecionado para o pedido.");
       return;
     }
 
-    if (sacola.itens.some((item) => !item.disponivel)) {
-      setErro("Existem produtos indisponíveis. Volte à sacola e ajuste os itens.");
+    if (indisponivel) {
+      setErro(
+        "Existem produtos selecionados indisponíveis. Volte à sacola e ajuste os itens."
+      );
       return;
     }
 
@@ -109,7 +140,10 @@ export default function Checkout() {
     try {
       const resposta = await apiFetch("/pedidos", {
         method: "POST",
-        body: JSON.stringify({ endereco }),
+        body: JSON.stringify({
+          endereco,
+          itensSelecionados: itensSelecionados.map((item) => item.id),
+        }),
       });
 
       if (!resposta?.pedido?.id) {
@@ -125,11 +159,6 @@ export default function Checkout() {
       setEnviando(false);
     }
   }
-
-  const itens = sacola?.itens ?? [];
-  const total = Number(sacola?.valorTotal ?? 0);
-  const temItens = itens.length > 0;
-  const indisponivel = itens.some((item) => !item.disponivel);
 
   if (carregando) {
     return (
@@ -207,18 +236,20 @@ export default function Checkout() {
       <main className="min-h-[60vh] bg-[#FCFAF5] px-4 py-16 text-center text-[#211C14]">
         <ShoppingBag className="mx-auto mb-5 text-[#968052]" size={42} />
 
-        <h1 className="font-serif text-3xl">Sua sacola está vazia</h1>
+        <h1 className="font-serif text-3xl">
+          Nenhum produto selecionado
+        </h1>
 
         <p className="mt-3 text-sm text-[#756C5C]">
-          Adicione suas joias antes de continuar.
+          Volte à sacola e selecione os produtos que deseja comprar.
         </p>
 
         <Link
           to="/sacola"
           className="mt-7 inline-flex items-center gap-2 bg-[#211C14] px-6 py-3 text-sm text-white hover:bg-[#968052]"
         >
-          Voltar à sacola
           <ArrowLeft size={16} />
+          Voltar à sacola
         </Link>
       </main>
     );
@@ -237,7 +268,7 @@ export default function Checkout() {
 
         <header className="mb-8 border-b border-[#E9DCC4] pb-6 sm:mb-10">
           <p className="mb-2 text-xs uppercase tracking-[0.25em] text-[#968052]">
-            Sua experiência AURORA
+            Sua experiência AURELIA
           </p>
 
           <h1 className="font-serif text-3xl sm:text-4xl lg:text-5xl">
@@ -260,7 +291,7 @@ export default function Checkout() {
 
         {indisponivel && (
           <div className="mb-6 border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-            Há produtos indisponíveis ou com quantidade acima do estoque.
+            Há produtos selecionados indisponíveis ou com quantidade acima do estoque.
             <Link to="/sacola" className="ml-1 underline underline-offset-4">
               Revisar sacola
             </Link>
@@ -347,8 +378,12 @@ export default function Checkout() {
               <h2 className="font-serif text-2xl">Resumo do pedido</h2>
             </div>
 
+            <p className="mt-2 text-xs text-[#756C5C]">
+              {itensSelecionados.length} produto(s) selecionado(s)
+            </p>
+
             <div className="mt-6 divide-y divide-[#E9DCC4]">
-              {itens.map((item) => (
+              {itensSelecionados.map((item) => (
                 <div key={item.id} className="flex gap-3 py-4">
                   <div className="h-16 w-14 shrink-0 overflow-hidden bg-[#F8F3E8]">
                     {item.imagem ? (

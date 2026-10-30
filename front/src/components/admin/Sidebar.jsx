@@ -16,7 +16,7 @@ import {
 const navigation = [
   { label: "Visão geral", icon: LayoutDashboard, to: "/admin", end: true },
   { label: "Produtos", icon: Package, to: "/admin/produtos" },
-  { label: "Pedidos", icon: ShoppingBag, to: "/admin/pedidos", count: "8" },
+  { label: "Pedidos", icon: ShoppingBag, to: "/admin/pedidos"},
   { label: "Clientes", icon: Users, to: "/admin/clientes" },
   { label: "Categorias", icon: Tags, to: "/admin/categorias" },
   { label: "Materiais", icon: Gem, to: "/admin/materiais"},

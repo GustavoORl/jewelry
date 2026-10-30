@@ -22,6 +22,7 @@ model Usuario {
   enderecos    Endereco[]
   pedidos      Pedido[]
   sessoesRefreshToken SessaoRefreshToken[]
+  favoritos Favorito[]
 }
 
 model Endereco {
@@ -83,6 +84,7 @@ model Produto {
   itensPedido   ItemPedido[]
   categoria     Categoria         @relation(fields: [categoriaId], references: [id])
   materiais     ProdutoMaterial[]
+  favoritos Favorito[]
 
   @@index([categoriaId])
   @@index([ativo])
@@ -201,4 +203,17 @@ model SessaoRefreshToken {
 
   @@index([usuarioId])
   @@index([expiraEm])
+}
+
+
+model Favorito {
+  usuarioId String
+  produtoId String
+  criadoEm  DateTime @default(now())
+
+  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, produtoId])
+  @@index([produtoId])
 }

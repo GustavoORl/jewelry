@@ -1,5 +1,5 @@
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
     ArrowLeft,
@@ -11,6 +11,7 @@ import {
     RefreshCw,
     ShieldCheck,
     Truck,
+    Check,
 } from "lucide-react";
 
 import { apiFetch } from "../../services/api.js";
@@ -29,6 +30,8 @@ export default function SacolaUser() {
     const [itemEmAtualizacao, setItemEmAtualizacao] = useState(null);
     const [erro, setErro] = useState("");
 
+    // IDs dos itens selecionados para o pedido.
+    const [itensSelecionados, setItensSelecionados] = useState([]);
 
     const carregarSacola = useCallback(async () => {
         setCarregando(true);
@@ -37,8 +40,6 @@ export default function SacolaUser() {
         try {
             const dados = await apiFetch("/sacola");
 
-            // A API pode retornar a sacola diretamente
-            // ou dentro de uma propriedade "sacola".
             const sacolaRecebida = dados?.sacola ?? dados;
 
             if (!sacolaRecebida || !Array.isArray(sacolaRecebida.itens)) {
@@ -48,6 +49,13 @@ export default function SacolaUser() {
             }
 
             setSacola(sacolaRecebida);
+
+            // Seleciona inicialmente todos os itens disponíveis.
+            setItensSelecionados(
+                sacolaRecebida.itens
+                    .filter((item) => item.disponivel)
+                    .map((item) => item.id)
+            );
         } catch (error) {
             setErro(
                 error.message || "Ocorreu um erro ao carregar a sacola."
@@ -57,12 +65,9 @@ export default function SacolaUser() {
         }
     }, []);
 
-
     useEffect(() => {
         carregarSacola();
     }, [carregarSacola]);
-
-
 
     const atualizarQuantidade = async (item, novaQuantidade) => {
         if (novaQuantidade < 1 || itemEmAtualizacao) return;
@@ -81,19 +86,29 @@ export default function SacolaUser() {
             const sacolaAtualizada = dados?.sacola ?? dados;
 
             if (!Array.isArray(sacolaAtualizada?.itens)) {
-                throw new Error("Não foi possível atualizar os dados da sacola.");
+                throw new Error(
+                    "Não foi possível atualizar os dados da sacola."
+                );
             }
 
             setSacola(sacolaAtualizada);
+
+            // Atualiza a seleção caso algum produto fique indisponível.
+            setItensSelecionados((atuais) =>
+                atuais.filter((id) =>
+                    sacolaAtualizada.itens.some(
+                        (itemAtualizado) =>
+                            itemAtualizado.id === id &&
+                            itemAtualizado.disponivel
+                    )
+                )
+            );
         } catch (error) {
             setErro(error.message || "Erro ao atualizar a quantidade.");
         } finally {
             setItemEmAtualizacao(null);
         }
     };
-
-
-
 
     const removerItem = async (itemId) => {
         if (itemEmAtualizacao) return;
@@ -109,10 +124,17 @@ export default function SacolaUser() {
             const sacolaAtualizada = dados?.sacola ?? dados;
 
             if (!Array.isArray(sacolaAtualizada?.itens)) {
-                throw new Error("Não foi possível atualizar os dados da sacola.");
+                throw new Error(
+                    "Não foi possível atualizar os dados da sacola."
+                );
             }
 
             setSacola(sacolaAtualizada);
+
+            // Remove o item também da seleção.
+            setItensSelecionados((atuais) =>
+                atuais.filter((id) => id !== itemId)
+            );
         } catch (error) {
             setErro(error.message || "Erro ao remover o produto.");
         } finally {
@@ -120,16 +142,89 @@ export default function SacolaUser() {
         }
     };
 
-
     const itens = sacola?.itens ?? [];
-    const valorTotal = Number(sacola?.valorTotal ?? 0);
-    const quantidadeItens = Number(sacola?.quantidadeItens ?? 0);
-    const temItens = itens.length > 0;
-    const temItemIndisponivel = itens.some((item) => !item.disponivel);
 
-    const irParaCheckout = () => {
-        navigate("/checkout");
-    };
+    const temItens = itens.length > 0;
+
+    const itensDisponiveis = useMemo(
+        () => itens.filter((item) => item.disponivel),
+        [itens]
+    );
+
+    const itensSelecionadosDetalhes = useMemo(
+        () =>
+            itens.filter((item) =>
+                itensSelecionados.includes(item.id)
+            ),
+        [itens, itensSelecionados]
+    );
+
+    const quantidadeItensSelecionados = useMemo(
+        () =>
+            itensSelecionadosDetalhes.reduce(
+                (total, item) => total + Number(item.quantidade || 0),
+                0
+            ),
+        [itensSelecionadosDetalhes]
+    );
+
+    const valorTotalSelecionado = useMemo(
+        () =>
+            itensSelecionadosDetalhes.reduce(
+                (total, item) => total + Number(item.subtotal || 0),
+                0
+            ),
+        [itensSelecionadosDetalhes]
+    );
+
+    const todosSelecionados =
+        itensDisponiveis.length > 0 &&
+        itensDisponiveis.every((item) =>
+            itensSelecionados.includes(item.id)
+        );
+
+    const temItemIndisponivel = itens.some(
+        (item) => !item.disponivel
+    );
+
+    function alternarSelecao(itemId) {
+        setItensSelecionados((atuais) =>
+            atuais.includes(itemId)
+                ? atuais.filter((id) => id !== itemId)
+                : [...atuais, itemId]
+        );
+    }
+
+    function alternarTodos() {
+        if (todosSelecionados) {
+            setItensSelecionados([]);
+            return;
+        }
+
+        setItensSelecionados(
+            itensDisponiveis.map((item) => item.id)
+        );
+    }
+
+    function irParaCheckout() {
+        if (itensSelecionadosDetalhes.length === 0) {
+            setErro("Selecione pelo menos um produto para continuar.");
+            return;
+        }
+
+        if (itensSelecionadosDetalhes.some((item) => !item.disponivel)) {
+            setErro("Existem produtos indisponíveis na seleção.");
+            return;
+        }
+
+        navigate("/checkout", {
+            state: {
+                itensSelecionados: itensSelecionadosDetalhes.map(
+                    (item) => item.id
+                ),
+            },
+        });
+    }
 
     return (
         <main className="min-h-screen bg-[#FCFAF5] text-[#211C14]">
@@ -154,13 +249,14 @@ export default function SacolaUser() {
                             </h1>
 
                             <p className="mt-3 text-sm text-[#756C5C]">
-                                Revise suas joias antes de continuar.
+                                Selecione as joias que deseja comprar.
                             </p>
                         </div>
 
                         {!carregando && (
                             <span className="text-sm text-[#756C5C]">
-                                {quantidadeItens} {quantidadeItens === 1 ? "item" : "itens"}
+                                {itens.length}{" "}
+                                {itens.length === 1 ? "produto" : "produtos"}
                             </span>
                         )}
                     </div>
@@ -175,17 +271,21 @@ export default function SacolaUser() {
 
                         <button
                             type="button"
-                            onClick={carregarSacola}
+                            onClick={() => setErro("")}
                             className="font-medium underline underline-offset-4"
                         >
-                            Tentar novamente
+                            Fechar
                         </button>
                     </div>
                 )}
 
                 {carregando ? (
                     <div className="flex min-h-[300px] flex-col items-center justify-center gap-4">
-                        <RefreshCw className="animate-spin text-[#968052]" size={28} />
+                        <RefreshCw
+                            className="animate-spin text-[#968052]"
+                            size={28}
+                        />
+
                         <p className="text-sm text-[#756C5C]">
                             Preparando sua sacola...
                         </p>
@@ -215,6 +315,30 @@ export default function SacolaUser() {
                 ) : (
                     <div className="grid grid-cols-1 items-start gap-8 lg:grid-cols-[1fr_360px] lg:gap-12">
                         <section className="min-w-0">
+                            {/* Selecionar todos */}
+
+                            <div className="mb-5 flex flex-wrap items-center justify-between gap-3 border-b border-[#E9DCC4] pb-4">
+                                <label className="flex cursor-pointer items-center gap-3 text-sm font-medium">
+                                    <input
+                                        type="checkbox"
+                                        checked={todosSelecionados}
+                                        onChange={alternarTodos}
+                                        disabled={
+                                            itensDisponiveis.length === 0 ||
+                                            Boolean(itemEmAtualizacao)
+                                        }
+                                        className="h-4 w-4 accent-[#968052]"
+                                    />
+
+                                    Selecionar todos
+                                </label>
+
+                                <span className="text-xs text-[#756C5C]">
+                                    {itensSelecionadosDetalhes.length} de{" "}
+                                    {itensDisponiveis.length} produtos selecionados
+                                </span>
+                            </div>
+
                             <div className="hidden grid-cols-[minmax(0,1fr)_120px_110px] gap-4 border-b border-[#E9DCC4] pb-4 text-xs uppercase tracking-wider text-[#756C5C] sm:grid">
                                 <span>Produto</span>
                                 <span className="text-center">Quantidade</span>
@@ -223,15 +347,45 @@ export default function SacolaUser() {
 
                             <div className="divide-y divide-[#E9DCC4]">
                                 {itens.map((item) => {
-                                    const atualizando = itemEmAtualizacao === item.id;
+                                    const atualizando =
+                                        itemEmAtualizacao === item.id;
+
+                                    const selecionado =
+                                        itensSelecionados.includes(item.id);
 
                                     return (
                                         <article
                                             key={item.id}
-                                            className={`grid grid-cols-1 gap-4 py-6 sm:grid-cols-[minmax(0,1fr)_120px_110px] sm:items-center sm:gap-4 ${atualizando ? "opacity-60" : ""
-                                                }`}
+                                            className={`grid grid-cols-1 gap-4 py-6 sm:grid-cols-[minmax(0,1fr)_120px_110px] sm:items-center sm:gap-4 ${
+                                                atualizando ? "opacity-60" : ""
+                                            }`}
                                         >
-                                            <div className="flex min-w-0 gap-4">
+                                            <div className="flex min-w-0 gap-3 sm:gap-4">
+                                                {/* Seletor individual */}
+
+                                                <label
+                                                    className="flex shrink-0 cursor-pointer items-center"
+                                                    title={
+                                                        item.disponivel
+                                                            ? "Selecionar produto"
+                                                            : "Produto indisponível"
+                                                    }
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selecionado}
+                                                        disabled={
+                                                            !item.disponivel ||
+                                                            Boolean(itemEmAtualizacao)
+                                                        }
+                                                        onChange={() =>
+                                                            alternarSelecao(item.id)
+                                                        }
+                                                        aria-label={`Selecionar ${item.nome} para o pedido`}
+                                                        className="h-4 w-4 accent-[#968052] disabled:cursor-not-allowed"
+                                                    />
+                                                </label>
+
                                                 <div className="h-28 w-24 shrink-0 overflow-hidden bg-[#F8F3E8] sm:h-32 sm:w-28">
                                                     {item.imagem ? (
                                                         <img
@@ -241,7 +395,10 @@ export default function SacolaUser() {
                                                         />
                                                     ) : (
                                                         <div className="flex h-full items-center justify-center text-[#968052]">
-                                                            <ShoppingBag size={28} strokeWidth={1.2} />
+                                                            <ShoppingBag
+                                                                size={28}
+                                                                strokeWidth={1.2}
+                                                            />
                                                         </div>
                                                     )}
                                                 </div>
@@ -256,8 +413,11 @@ export default function SacolaUser() {
                                                     <p>{formatarPreco(item.preco)}</p>
 
                                                     <p className="mt-1 text-xs text-stone-500">
-                                                        Estoque disponível: {item.estoque}{" "}
-                                                        {item.estoque === 1 ? "unidade" : "unidades"}
+                                                        Estoque disponível:{" "}
+                                                        {item.estoque}{" "}
+                                                        {item.estoque === 1
+                                                            ? "unidade"
+                                                            : "unidades"}
                                                     </p>
 
                                                     {!item.disponivel && (
@@ -268,7 +428,9 @@ export default function SacolaUser() {
 
                                                     <button
                                                         type="button"
-                                                        onClick={() => removerItem(item.id)}
+                                                        onClick={() =>
+                                                            removerItem(item.id)
+                                                        }
                                                         disabled={Boolean(itemEmAtualizacao)}
                                                         className="mt-auto flex items-center gap-1.5 pt-4 text-xs text-[#756C5C] transition hover:text-red-700 disabled:cursor-not-allowed"
                                                     >
@@ -287,9 +449,15 @@ export default function SacolaUser() {
                                                     <button
                                                         type="button"
                                                         aria-label={`Diminuir quantidade de ${item.nome}`}
-                                                        disabled={item.quantidade <= 1 || Boolean(itemEmAtualizacao)}
+                                                        disabled={
+                                                            item.quantidade <= 1 ||
+                                                            Boolean(itemEmAtualizacao)
+                                                        }
                                                         onClick={() =>
-                                                            atualizarQuantidade(item, item.quantidade - 1)
+                                                            atualizarQuantidade(
+                                                                item,
+                                                                item.quantidade - 1
+                                                            )
                                                         }
                                                         className="flex h-full w-9 items-center justify-center transition hover:bg-[#F8F3E8] disabled:cursor-not-allowed disabled:opacity-40"
                                                     >
@@ -309,7 +477,10 @@ export default function SacolaUser() {
                                                             !item.disponivel
                                                         }
                                                         onClick={() =>
-                                                            atualizarQuantidade(item, item.quantidade + 1)
+                                                            atualizarQuantidade(
+                                                                item,
+                                                                item.quantidade + 1
+                                                            )
                                                         }
                                                         className="flex h-full w-9 items-center justify-center transition hover:bg-[#F8F3E8] disabled:cursor-not-allowed disabled:opacity-40"
                                                     >
@@ -333,19 +504,28 @@ export default function SacolaUser() {
                             </div>
                         </section>
 
-                        <aside className="border border-[#E9DCC4] bg-white p-5 sm:p-6 lg:sticky lg:top-6">
-                            <h2 className="font-serif text-2xl">Resumo do pedido</h2>
+                        {/* Resumo do pedido */}
+
+                        <aside className="border border-[#E9DCC4] bg-white p-5 sm:p-6 lg:top-6">
+                            <h2 className="font-serif text-2xl">
+                                Resumo do pedido
+                            </h2>
 
                             <div className="mt-6 space-y-4 border-b border-[#E9DCC4] pb-5 text-sm">
                                 <div className="flex justify-between gap-4 text-[#756C5C]">
-                                    <span>Produtos ({quantidadeItens})</span>
+                                    <span>
+                                        Produtos selecionados (
+                                        {quantidadeItensSelecionados})
+                                    </span>
+
                                     <span className="text-right tabular-nums">
-                                        {formatarPreco(valorTotal)}
+                                        {formatarPreco(valorTotalSelecionado)}
                                     </span>
                                 </div>
 
                                 <div className="flex justify-between gap-4 text-[#756C5C]">
                                     <span>Frete</span>
+
                                     <span className="text-right text-xs">
                                         Calculado na próxima etapa
                                     </span>
@@ -354,29 +534,39 @@ export default function SacolaUser() {
 
                             <div className="flex items-center justify-between gap-4 py-5">
                                 <span className="font-medium">Subtotal</span>
+
                                 <span className="text-xl font-medium tabular-nums">
-                                    {formatarPreco(valorTotal)}
+                                    {formatarPreco(valorTotalSelecionado)}
                                 </span>
                             </div>
 
                             <p className="mb-5 text-xs leading-5 text-[#756C5C]">
-                                O valor final poderá mudar após o cálculo do frete e a validação
-                                dos produtos na finalização da compra.
+                                O valor considera somente os produtos selecionados.
+                                O total final será atualizado após o cálculo do frete.
                             </p>
 
                             <button
                                 type="button"
                                 onClick={irParaCheckout}
-                                disabled={temItemIndisponivel || Boolean(itemEmAtualizacao)}
+                                disabled={
+                                    itensSelecionadosDetalhes.length === 0 ||
+                                    Boolean(itemEmAtualizacao)
+                                }
                                 className="flex w-full items-center justify-center gap-3 bg-[#211C14] px-5 py-4 text-sm text-white transition hover:bg-[#968052] disabled:cursor-not-allowed disabled:bg-[#B9B2A6]"
                             >
                                 Continuar para entrega
                                 <ArrowRight size={17} />
                             </button>
 
+                            {itensSelecionadosDetalhes.length === 0 && (
+                                <p className="mt-3 text-xs leading-5 text-[#968052]">
+                                    Selecione pelo menos um produto para continuar.
+                                </p>
+                            )}
+
                             {temItemIndisponivel && (
                                 <p className="mt-3 text-xs leading-5 text-red-700">
-                                    Ajuste ou remova os produtos indisponíveis antes de continuar.
+                                    Alguns produtos estão indisponíveis e não podem ser selecionados.
                                 </p>
                             )}
 
@@ -386,6 +576,7 @@ export default function SacolaUser() {
                                         size={19}
                                         className="mt-0.5 shrink-0 text-[#968052]"
                                     />
+
                                     <p className="text-xs leading-5 text-[#756C5C]">
                                         Compra protegida e pagamento processado com segurança.
                                     </p>
@@ -396,6 +587,7 @@ export default function SacolaUser() {
                                         size={19}
                                         className="mt-0.5 shrink-0 text-[#968052]"
                                     />
+
                                     <p className="text-xs leading-5 text-[#756C5C]">
                                         As opções de entrega serão apresentadas na próxima etapa.
                                     </p>

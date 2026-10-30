@@ -78,7 +78,7 @@ export default function Promocoes() {
           {/* Banner editorial */}
           <article className="relative flex min-h-[300px] items-end overflow-hidden rounded-[20px] bg-[#302719] text-white md:h-[312px]">
             <img
-              src="/assets/images/editorial-noivas.png"
+              src="/assets/images/promocao-joia.png"
               alt="Editorial de joias para noivas"
               className="absolute inset-0 h-full w-full object-cover object-center"
             />

@@ -7,6 +7,7 @@ import usuarioRoutes from "./usuarioRoutes.js";
 import produtoRoutes from "./produtoRoutes.js";
 import categoriaRoutes from "./categoriaRoutes.js";
 import materialRoutes from "./materialRoutes.js";
+import pedidoRoutes from "./pedidoRoutes.js"
 
 const router = Router();
 
@@ -17,5 +18,6 @@ router.use("/usuarios", usuarioRoutes);
 router.use("/produtos", produtoRoutes);
 router.use("/categorias", categoriaRoutes);
 router.use("/materiais", materialRoutes);
+router.use("/pedidos", pedidoRoutes)
 
 export default router;

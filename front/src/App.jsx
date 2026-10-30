@@ -12,6 +12,9 @@ import ProdutoDetalhado from "./pages/ProdutoDetalhado.jsx";
 
 import SacolaUser from "./pages/user/SacolaUser.jsx";
 import Checkout from "./pages/user/Checkout.jsx";
+import PedidoUser from "./pages/user/PedidoUser.jsx";
+import PedidoDetalhado from "./pages/user/PedidoDetalhado.jsx";
+import FavoritoUser from "./pages/user/FavoritoUser.jsx";
 
 import RotaProtegida from "./components/RotaProtegida.jsx";
 
@@ -63,6 +66,9 @@ export default function App() {
 
               <Route path="/sacola" element={<SacolaUser />} />
               <Route path="/checkout" element={<Checkout />} />
+              <Route path="/pedidos" element={<PedidoUser />} />
+              <Route path="/pedidos/:pedidoId" element={<PedidoDetalhado />} />
+              <Route path="/favoritos" element={<FavoritoUser />} />
             </Route>
 
             {/* Login */}

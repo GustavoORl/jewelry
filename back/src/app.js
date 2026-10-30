@@ -11,6 +11,7 @@ import materialPublicoRoutes from "./routes/public/materialRoutes.js";
 
 import sacolaUserRoutes from "./routes/user/sacolaRoutes.js"
 import pedidoUserRoutes from "./routes/user/pedidoRoutes.js"
+import favoritoUserRoutes from "./routes/user/favoritoRoutes.js"
 
 import adminRoutes from "./routes/admin/index.js";
 
@@ -51,6 +52,7 @@ app.use("/materiais", materialPublicoRoutes);
 // Rotas Usuários logados
 app.use("/sacola",sacolaUserRoutes);
 app.use("/pedidos", pedidoUserRoutes);
+app.use("/favoritos", favoritoUserRoutes);
 
 // Rotas administrativas
 app.use("/admin", adminRoutes);

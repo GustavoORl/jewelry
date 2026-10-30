@@ -95,6 +95,8 @@ function CardProduto({
     favorito,
     aoAlternarFavorito,
     aoAdicionarSacola,
+    processandoFavorito,
+    processandoSacola,
 }) {
     return (
         <article className="group overflow-hidden rounded-2xl border border-[#EAE0CE] bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#211C14]/5">
@@ -109,9 +111,7 @@ function CardProduto({
                         alt={produto.nome}
                         loading="lazy"
                         onError={(event) => {
-                            if (
-                                event.currentTarget.src !== imagemPadrao
-                            ) {
+                            if (event.currentTarget.src !== imagemPadrao) {
                                 event.currentTarget.src = imagemPadrao;
                             }
                         }}
@@ -128,13 +128,14 @@ function CardProduto({
                 <button
                     type="button"
                     onClick={() => aoAlternarFavorito(produto.id)}
+                    disabled={processandoFavorito}
                     aria-label={
                         favorito
                             ? "Remover dos favoritos"
                             : "Adicionar aos favoritos"
                     }
                     aria-pressed={favorito}
-                    className={`absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border bg-white/95 transition-colors ${
+                    className={`absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border bg-white/95 transition-colors disabled:cursor-wait disabled:opacity-50 ${
                         favorito
                             ? "border-[#B9975B] text-[#A47B43]"
                             : "border-[#E8DDCA] text-[#211C14] hover:border-[#B9975B]"
@@ -148,7 +149,7 @@ function CardProduto({
             </div>
 
             <div className="p-4 sm:p-5">
-                <p className="mb-2 text-[9px] uppercase tracking-[0.2em] text-[#9B805D]">
+                <p className="mb-2 text-[9px] font-medium uppercase tracking-[0.2em] text-[#9B805D]">
                     {produto.marca}
                 </p>
 
@@ -173,11 +174,14 @@ function CardProduto({
                     <button
                         type="button"
                         onClick={() => aoAdicionarSacola(produto.id)}
+                        disabled={processandoSacola}
                         aria-label={`Adicionar ${produto.nome} à sacola`}
-                        className="inline-flex items-center gap-2 rounded-full bg-[#211C14] px-3.5 py-2.5 text-xs font-medium text-white transition-colors hover:bg-[#4A3D2B] active:scale-95"
+                        className="inline-flex items-center gap-2 rounded-full bg-[#211C14] px-3.5 py-2.5 text-xs font-medium text-white transition-colors hover:bg-[#4A3D2B] active:scale-95 disabled:cursor-wait disabled:opacity-50"
                     >
                         <ShoppingBag size={14} />
-                        Adicionar
+                        {processandoSacola
+                            ? "Adicionando..."
+                            : "Adicionar"}
                     </button>
                 </div>
             </div>
@@ -202,10 +206,44 @@ export default function ListagemProdutos() {
 
     const [favoritos, setFavoritos] = useState([]);
     const [sacola, setSacola] = useState([]);
-    const [mostrarFiltros, setMostrarFiltros] = useState(false);
 
+    const [mostrarFiltros, setMostrarFiltros] = useState(false);
     const [carregando, setCarregando] = useState(true);
     const [erro, setErro] = useState("");
+
+    const [processandoFavoritos, setProcessandoFavoritos] = useState([]);
+    const [processandoSacola, setProcessandoSacola] = useState([]);
+    const [mensagem, setMensagem] = useState("");
+
+    // IMPORTANTE:
+    // As categorias e os materiais disponíveis são calculados
+    // antes de qualquer efeito que dependa deles.
+
+    const categoriasDisponiveis = useMemo(() => {
+        const nomes = [
+            ...categorias.map((categoria) => categoria.nome),
+            ...produtos.map((produto) => produto.categoriaNome),
+        ].filter(Boolean);
+
+        return [...new Set(nomes)].sort((a, b) =>
+            a.localeCompare(b, "pt-BR")
+        );
+    }, [categorias, produtos]);
+
+    const materiaisDisponiveis = useMemo(() => {
+        const nomes = [
+            ...materiais.map((material) => material.nome),
+            ...produtos.flatMap((produto) =>
+                produto.materiais.map((material) => material.nome)
+            ),
+        ].filter(Boolean);
+
+        return [...new Set(nomes)].sort((a, b) =>
+            a.localeCompare(b, "pt-BR")
+        );
+    }, [materiais, produtos]);
+
+    // Carregar produtos, categorias e materiais.
 
     const carregarDados = useCallback(async () => {
         try {
@@ -257,10 +295,33 @@ export default function ListagemProdutos() {
         } catch (error) {
             setErro(
                 error.message ||
-                    "Não foi possível carregar o catálogo."
+                "Não foi possível carregar o catálogo."
             );
         } finally {
             setCarregando(false);
+        }
+    }, []);
+
+    // Carregar favoritos do usuário autenticado.
+
+    const carregarFavoritos = useCallback(async () => {
+        try {
+            const resultado = await apiFetch("/favoritos");
+
+            const lista = extrairLista(resultado, "favoritos");
+
+            setFavoritos(
+                lista
+                    .map((item) => item.produtoId || item.produto?.id)
+                    .filter(Boolean)
+            );
+        } catch (error) {
+            if (error.status === 401 || error.status === 403) {
+                setFavoritos([]);
+                return;
+            }
+
+            console.error("Erro ao carregar favoritos:", error);
         }
     }, []);
 
@@ -268,36 +329,18 @@ export default function ListagemProdutos() {
         carregarDados();
     }, [carregarDados]);
 
-    const categoriasDisponiveis = useMemo(() => {
-        const nomes = [
-            ...categorias.map((categoria) => categoria.nome),
-            ...produtos.map((produto) => produto.categoriaNome),
-        ].filter(Boolean);
+    useEffect(() => {
+        carregarFavoritos();
+    }, [carregarFavoritos]);
 
-        return [...new Set(nomes)].sort((a, b) =>
-            a.localeCompare(b, "pt-BR")
-        );
-    }, [categorias, produtos]);
+    // Sincronizar busca com a URL.
 
-    const materiaisDisponiveis = useMemo(() => {
-        const nomes = [
-            ...materiais.map((material) => material.nome),
-            ...produtos.flatMap((produto) =>
-                produto.materiais.map((material) => material.nome)
-            ),
-        ].filter(Boolean);
-
-        return [...new Set(nomes)].sort((a, b) =>
-            a.localeCompare(b, "pt-BR")
-        );
-    }, [materiais, produtos]);
-
-    // Sincroniza a busca com o parâmetro da URL.
     useEffect(() => {
         setBusca(buscaUrl);
     }, [buscaUrl]);
 
-    // Seleciona a categoria informada na URL.
+    // Selecionar categoria informada na URL.
+
     useEffect(() => {
         if (!categoriaUrl) {
             setCategoriaAtiva("Todas");
@@ -319,13 +362,103 @@ export default function ListagemProdutos() {
             return;
         }
 
-        // Compatibilidade caso a URL contenha o nome da categoria.
         const categoriaPorNome = categoriasDisponiveis.find(
-            (nome) => normalizarNome(nome) === normalizarNome(categoriaUrl)
+            (nome) =>
+                normalizarNome(nome) === normalizarNome(categoriaUrl)
         );
 
         setCategoriaAtiva(categoriaPorNome || "Todas");
     }, [categoriaUrl, categorias, categoriasDisponiveis]);
+
+    // Alternar favorito.
+
+    async function alternarFavorito(produtoId) {
+        if (processandoFavoritos.includes(produtoId)) return;
+
+        setProcessandoFavoritos((atuais) => [
+            ...atuais,
+            produtoId,
+        ]);
+
+        setMensagem("");
+
+        try {
+            if (favoritos.includes(produtoId)) {
+                await apiFetch(`/favoritos/${produtoId}`, {
+                    method: "DELETE",
+                });
+
+                setFavoritos((atuais) =>
+                    atuais.filter((id) => id !== produtoId)
+                );
+
+                setMensagem("Produto removido dos favoritos.");
+            } else {
+                await apiFetch(`/favoritos/${produtoId}`, {
+                    method: "POST",
+                });
+
+                setFavoritos((atuais) =>
+                    atuais.includes(produtoId)
+                        ? atuais
+                        : [...atuais, produtoId]
+                );
+
+                setMensagem("Produto adicionado aos favoritos.");
+            }
+        } catch (error) {
+            setMensagem(
+                error.status === 401 || error.status === 403
+                    ? "Entre na sua conta para favoritar produtos."
+                    : error.message ||
+                        "Não foi possível atualizar seus favoritos."
+            );
+        } finally {
+            setProcessandoFavoritos((atuais) =>
+                atuais.filter((id) => id !== produtoId)
+            );
+        }
+    }
+
+    // Adicionar produto à sacola.
+
+    async function adicionarSacola(produtoId) {
+        if (processandoSacola.includes(produtoId)) return;
+
+        setProcessandoSacola((atuais) => [
+            ...atuais,
+            produtoId,
+        ]);
+
+        setMensagem("");
+
+        try {
+            await apiFetch("/sacola/itens", {
+                method: "POST",
+                body: JSON.stringify({
+                    produtoId,
+                    quantidade: 1,
+                }),
+            });
+
+            setSacola((atuais) => [...atuais, produtoId]);
+
+            setMensagem("Produto adicionado à sacola!");
+        } catch (error) {
+            setMensagem(
+                error.status === 401 || error.status === 403
+                    ? "Entre na sua conta para adicionar produtos à sacola."
+                    : error.message ||
+                        "Não foi possível adicionar o produto à sacola."
+            );
+        } finally {
+            setProcessandoSacola((atuais) =>
+                atuais.filter((id) => id !== produtoId)
+            );
+        }
+    }
+
+    // Filtrar e ordenar produtos.
 
     const produtosFiltrados = useMemo(() => {
         const resultado = produtos.filter((produto) => {
@@ -430,18 +563,6 @@ export default function ListagemProdutos() {
         setSearchParams(novosParametros, { replace: true });
     }
 
-    function alternarFavorito(id) {
-        setFavoritos((atuais) =>
-            atuais.includes(id)
-                ? atuais.filter((item) => item !== id)
-                : [...atuais, id]
-        );
-    }
-
-    function adicionarSacola(id) {
-        setSacola((atuais) => [...atuais, id]);
-    }
-
     function limparFiltros() {
         setBusca("");
         setCategoriaAtiva("Todas");
@@ -464,6 +585,7 @@ export default function ListagemProdutos() {
     return (
         <main className="min-h-screen bg-[#FCFAF6] text-[#211C14]">
             {/* Cabeçalho editorial */}
+
             <section className="border-b border-[#EAE0CE] bg-[#F7F2E8] px-5 py-2 sm:px-8 lg:px-12">
                 <div className="mx-auto flex max-w-[1320px] items-center justify-between">
                     <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-[#A47B43]">
@@ -474,18 +596,43 @@ export default function ListagemProdutos() {
                         {carregando
                             ? "Carregando coleção..."
                             : `${produtosFiltrados.length} ${
-                                  produtosFiltrados.length === 1
-                                      ? "peça encontrada"
-                                      : "peças encontradas"
-                              }`}
+                                produtosFiltrados.length === 1
+                                    ? "peça encontrada"
+                                    : "peças encontradas"
+                            }`}
                     </div>
                 </div>
             </section>
 
+            {/* Mensagem de feedback */}
+
+            {mensagem && (
+                <div
+                    role="status"
+                    aria-live="polite"
+                    className="fixed right-5 top-5 z-50 max-w-[calc(100%-40px)] rounded-xl border border-[#EAE0CE] bg-white px-5 py-4 text-sm text-[#211C14] shadow-lg"
+                >
+                    <div className="flex items-center gap-3">
+                        <span className="flex-1">{mensagem}</span>
+
+                        <button
+                            type="button"
+                            onClick={() => setMensagem("")}
+                            aria-label="Fechar mensagem"
+                            className="text-[#847A6C] hover:text-[#211C14]"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Catálogo */}
+
             <section className="px-5 py-8 sm:px-8 sm:py-10 lg:px-12 lg:py-12">
                 <div className="mx-auto max-w-[1320px]">
                     {/* Ordenação */}
+
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex flex-col gap-3 sm:flex-row">
                             <button
@@ -537,6 +684,7 @@ export default function ListagemProdutos() {
 
                     <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
                         {/* Barra lateral de filtros */}
+
                         <aside
                             className={`${
                                 mostrarFiltros ? "block" : "hidden"
@@ -569,9 +717,7 @@ export default function ListagemProdutos() {
                                             <input
                                                 type="radio"
                                                 name="categoria"
-                                                checked={
-                                                    categoriaAtiva === "Todas"
-                                                }
+                                                checked={categoriaAtiva === "Todas"}
                                                 onChange={() =>
                                                     selecionarCategoria("Todas")
                                                 }
@@ -590,13 +736,10 @@ export default function ListagemProdutos() {
                                                         type="radio"
                                                         name="categoria"
                                                         checked={
-                                                            categoriaAtiva ===
-                                                            categoria
+                                                            categoriaAtiva === categoria
                                                         }
                                                         onChange={() =>
-                                                            selecionarCategoria(
-                                                                categoria
-                                                            )
+                                                            selecionarCategoria(categoria)
                                                         }
                                                         className="accent-[#968052]"
                                                     />
@@ -617,9 +760,7 @@ export default function ListagemProdutos() {
                                             <input
                                                 type="radio"
                                                 name="material"
-                                                checked={
-                                                    materialAtivo === "Todos"
-                                                }
+                                                checked={materialAtivo === "Todos"}
                                                 onChange={() =>
                                                     setMaterialAtivo("Todos")
                                                 }
@@ -638,13 +779,10 @@ export default function ListagemProdutos() {
                                                         type="radio"
                                                         name="material"
                                                         checked={
-                                                            materialAtivo ===
-                                                            material
+                                                            materialAtivo === material
                                                         }
                                                         onChange={() =>
-                                                            setMaterialAtivo(
-                                                                material
-                                                            )
+                                                            setMaterialAtivo(material)
                                                         }
                                                         className="accent-[#968052]"
                                                     />
@@ -658,6 +796,7 @@ export default function ListagemProdutos() {
                         </aside>
 
                         {/* Resultados */}
+
                         <div className="min-w-0">
                             {possuiFiltros && (
                                 <div className="mb-5 flex flex-wrap items-center gap-2">
@@ -672,9 +811,7 @@ export default function ListagemProdutos() {
                                                 setBusca("");
 
                                                 const novosParametros =
-                                                    new URLSearchParams(
-                                                        searchParams
-                                                    );
+                                                    new URLSearchParams(searchParams);
 
                                                 novosParametros.delete("busca");
 
@@ -786,15 +923,15 @@ export default function ListagemProdutos() {
                                         <CardProduto
                                             key={produto.id}
                                             produto={produto}
-                                            favorito={favoritos.includes(
+                                            favorito={favoritos.includes(produto.id)}
+                                            aoAlternarFavorito={alternarFavorito}
+                                            aoAdicionarSacola={adicionarSacola}
+                                            processandoFavorito={processandoFavoritos.includes(
                                                 produto.id
                                             )}
-                                            aoAlternarFavorito={
-                                                alternarFavorito
-                                            }
-                                            aoAdicionarSacola={
-                                                adicionarSacola
-                                            }
+                                            processandoSacola={processandoSacola.includes(
+                                                produto.id
+                                            )}
                                         />
                                     ))}
                                 </div>
@@ -804,15 +941,21 @@ export default function ListagemProdutos() {
                 </div>
             </section>
 
+            {/* Indicador da sacola */}
+
             {sacola.length > 0 && (
                 <div className="fixed bottom-5 right-5 z-40">
+                    <Link to="/sacola">
                     <div className="flex items-center gap-3 rounded-full bg-[#211C14] px-5 py-3.5 text-sm text-white shadow-xl">
                         <ShoppingBag size={17} />
+                        
                         <span>
                             {sacola.length}{" "}
                             {sacola.length === 1 ? "item" : "itens"} na sacola
                         </span>
+                        
                     </div>
+                    </Link>
                 </div>
             )}
         </main>
