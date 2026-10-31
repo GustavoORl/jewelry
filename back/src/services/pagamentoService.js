@@ -274,14 +274,37 @@ export async function reconciliarPagamento(pagamentoId, usuarioId) {
 
   const novoStatus = interpretarStatusPagamento(order);
 
-  // Se o pagamento já estiver aprovado, não permitir regressão de status
-  if (pagamento.status === "APROVADO" && novoStatus !== "APROVADO") {
-    return {
-      pagamentoId: pagamento.id,
-      status: pagamento.status,
-      mensagem: "Pagamento já confirmado anteriormente.",
-    };
-  }
+  if (!novoStatus) {
+  throw new Error(
+    `Status do Mercado Pago não reconhecido: ${order.status} (${order.status_detail}).`
+  );
+}
+
+  // Não permitir que um pagamento aprovado volte para outro status.
+if (
+  pagamento.status === "APROVADO" &&
+  novoStatus !== "APROVADO"
+) {
+  return {
+    pagamentoId: pagamento.id,
+    status: pagamento.status,
+    statusPedido: pagamento.pedido.status,
+    mensagem: "Pagamento já confirmado anteriormente.",
+  };
+}
+
+// Não permitir regressão de um pagamento reembolsado.
+if (
+  pagamento.status === "REEMBOLSADO" &&
+  novoStatus !== "REEMBOLSADO"
+) {
+  return {
+    pagamentoId: pagamento.id,
+    status: pagamento.status,
+    statusPedido: pagamento.pedido.status,
+    mensagem: "Pagamento já reembolsado anteriormente.",
+  };
+}
 
   // Atualizar pagamento e pedido na mesma transação do banco
   const resultado = await prisma.$transaction(async (tx) => {
@@ -330,31 +353,71 @@ export async function reconciliarPagamento(pagamentoId, usuarioId) {
 function interpretarStatusPagamento(order) {
   const transacao = order.transactions?.payments?.[0];
 
-  if (!transacao) {
-    return "PROCESSANDO";
-  }
+  const statusOrder = order.status;
+  const detalheOrder = order.status_detail;
 
-  // Só aprovar quando a transação estiver efetivamente acreditada
+  const statusTransacao = transacao?.status;
+  const detalheTransacao = transacao?.status_detail;
+
+  // Aprovação: exige confirmação de crédito efetivo.
   if (
-    order.status === "processed" &&
-    order.status_detail === "accredited" &&
-    transacao.status === "processed" &&
-    transacao.status_detail === "accredited"
+    statusOrder === "processed" &&
+    detalheOrder === "accredited" &&
+    statusTransacao === "processed" &&
+    detalheTransacao === "accredited"
   ) {
     return "APROVADO";
   }
 
-  // Não confundir uma Order processada com uma transação aprovada.
-  // Outros estados serão tratados posteriormente.
+  // Reembolso integral.
   if (
-    order.status === "created" ||
-    order.status === "processing" ||
-    order.status === "action_required"
+    statusOrder === "refunded" ||
+    statusTransacao === "refunded"
   ) {
-    return order.status === "action_required"
-      ? "PENDENTE"
-      : "PROCESSANDO";
+    return "REEMBOLSADO";
   }
 
-  return "PROCESSANDO";
+  // Expiração.
+  if (
+    (statusOrder === "canceled" && detalheOrder === "expired") ||
+    (statusOrder === "failed" && detalheOrder === "expired") ||
+    (statusTransacao === "expired" && detalheTransacao === "expired")
+  ) {
+    return "EXPIRADO";
+  }
+
+  // Cancelamento.
+  if (
+    statusOrder === "canceled" ||
+    statusTransacao === "canceled"
+  ) {
+    return "CANCELADO";
+  }
+
+  // Recusa ou falha definitiva.
+  if (
+    statusOrder === "failed" ||
+    statusTransacao === "failed"
+  ) {
+    return "RECUSADO";
+  }
+
+  // Pagamento aguardando ação.
+  if (
+    statusOrder === "created" ||
+    statusOrder === "action_required"
+  ) {
+    return "PENDENTE";
+  }
+
+  // Pagamento em processamento.
+  if (
+    statusOrder === "processing" ||
+    statusTransacao === "processing"
+  ) {
+    return "PROCESSANDO";
+  }
+
+  // Não classificar estados desconhecidos como se fossem conhecidos.
+  return null;
 }
