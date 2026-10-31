@@ -12,6 +12,8 @@ import {
 } from "lucide-react";
 import { apiFetch } from "../../services/api";
 
+import FaixaNavegacao from "../../components/common/FaixaNavegacao";
+
 const statusConfig = {
   PENDENTE: {
     label: "Aguardando pagamento",
@@ -88,8 +90,17 @@ export default function PedidoUser() {
   }, []);
 
   return (
-    <main className="min-h-screen bg-[#FCFAF5] px-4 py-12 sm:px-6 lg:px-8">
-      <div className="mx-auto max-w-5xl">
+    <main className="min-h-screen bg-[#FCFAF5]">
+      <div className="max-md:hidden">
+                      <FaixaNavegacao
+                        mostrarVoltar={false}
+                        itens={[
+                          { label: "Início", to: "/" },
+                          { label: "Meus Pedidos", to: "/produtos"},
+                        ]}
+                      />
+                    </div>
+      <div className="mx-auto max-w-5xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="mb-10">
           <span className="text-xs font-medium uppercase tracking-[0.25em] text-[#968052]">
             Minha conta
@@ -142,7 +153,7 @@ export default function PedidoUser() {
             </p>
 
             <Link
-              to="/"
+              to="/produtos"
               className="mt-7 inline-flex bg-[#211C14] px-7 py-3 text-xs font-medium uppercase tracking-widest text-white transition hover:bg-[#968052]"
             >
               Explorar produtos

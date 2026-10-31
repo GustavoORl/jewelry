@@ -1,3 +1,4 @@
+
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import {
@@ -12,7 +13,11 @@ import {
   Truck,
 } from "lucide-react";
 
+import FaixaNavegacao from "../components/common/FaixaNavegacao";
+import ModalAutenticacao from "../components/common/ModalAutenticacao";
+
 import { apiFetch } from "../services/api.js";
+import { useAuth } from "../contexts/AuthContext";
 
 const imagemPadrao =
   "https://images.unsplash.com/photo-1611652022419-a9419f74343d?auto=format&fit=crop&w=1200&q=85";
@@ -30,18 +35,18 @@ function extrairProduto(resultado) {
 function normalizarImagens(produto) {
   const imagens = Array.isArray(produto.imagens)
     ? produto.imagens
-      .map((imagem) => {
-        if (typeof imagem === "string") return imagem;
+        .map((imagem) => {
+          if (typeof imagem === "string") return imagem;
 
-        return (
-          imagem?.url ||
-          imagem?.urlImagem ||
-          imagem?.caminho ||
-          imagem?.imagem ||
-          null
-        );
-      })
-      .filter(Boolean)
+          return (
+            imagem?.url ||
+            imagem?.urlImagem ||
+            imagem?.caminho ||
+            imagem?.imagem ||
+            null
+          );
+        })
+        .filter(Boolean)
     : [];
 
   const imagemPrincipal =
@@ -85,20 +90,20 @@ function obterMateriais(produto) {
     .filter(Boolean);
 }
 
-function obterFavoritos() {
-  try {
-    const favoritos = JSON.parse(
-      localStorage.getItem("aurelia_favoritos") || "[]"
-    );
-
-    return Array.isArray(favoritos) ? favoritos : [];
-  } catch {
-    return [];
+function extrairListaFavoritos(resultado) {
+  if (Array.isArray(resultado)) return resultado;
+  if (Array.isArray(resultado?.favoritos)) return resultado.favoritos;
+  if (Array.isArray(resultado?.dados?.favoritos)) {
+    return resultado.dados.favoritos;
   }
+  if (Array.isArray(resultado?.dados)) return resultado.dados;
+
+  return [];
 }
 
 export default function ProdutoDetalhado() {
   const { id } = useParams();
+  const { usuario, carregandoAuth } = useAuth();
 
   const [produto, setProduto] = useState(null);
   const [carregando, setCarregando] = useState(true);
@@ -106,9 +111,18 @@ export default function ProdutoDetalhado() {
   const [imagemSelecionada, setImagemSelecionada] = useState(0);
   const [quantidade, setQuantidade] = useState(1);
   const [favoritado, setFavoritado] = useState(false);
+  const [carregandoFavorito, setCarregandoFavorito] = useState(false);
   const [adicionado, setAdicionado] = useState(false);
   const [adicionando, setAdicionando] = useState(false);
   const [erroSacola, setErroSacola] = useState("");
+
+  const [modalAutenticacao, setModalAutenticacao] = useState(false);
+  const [motivoAutenticacao, setMotivoAutenticacao] = useState("geral");
+
+  function abrirModalAutenticacao(motivo) {
+    setMotivoAutenticacao(motivo);
+    setModalAutenticacao(true);
+  }
 
   useEffect(() => {
     let ativo = true;
@@ -131,17 +145,12 @@ export default function ProdutoDetalhado() {
 
         if (ativo) {
           setProduto(dados);
-          setFavoritado(
-            obterFavoritos().some(
-              (favorito) => String(favorito) === String(dados.id)
-            )
-          );
         }
       } catch (erroApi) {
         if (ativo) {
           setErro(
             erroApi.message ||
-            "Não foi possível carregar os dados deste produto."
+              "Não foi possível carregar os dados deste produto."
           );
         }
       } finally {
@@ -156,61 +165,117 @@ export default function ProdutoDetalhado() {
     };
   }, [id]);
 
-  function alternarFavorito() {
-    if (!produto) return;
+  // Consulta os favoritos da conta autenticada.
+  useEffect(() => {
+    let ativo = true;
 
-    const favoritos = obterFavoritos();
-    const jaFavoritado = favoritos.some(
-      (favorito) => String(favorito) === String(produto.id)
-    );
+    async function verificarFavorito() {
+      if (carregandoAuth || !usuario || !produto?.id) {
+        setFavoritado(false);
+        return;
+      }
 
-    const atualizados = jaFavoritado
-      ? favoritos.filter(
-        (favorito) => String(favorito) !== String(produto.id)
-      )
-      : [...favoritos, produto.id];
+      try {
+        const resultado = await apiFetch("/favoritos");
+        const favoritos = extrairListaFavoritos(resultado);
 
-    localStorage.setItem(
-      "aurelia_favoritos",
-      JSON.stringify(atualizados)
-    );
+        const encontrado = favoritos.some((favorito) => {
+          const produtoFavorito = favorito?.produto || favorito;
 
-    setFavoritado(!jaFavoritado);
-    window.dispatchEvent(new Event("favoritosAtualizados"));
+          const idFavorito =
+            produtoFavorito?.id ||
+            favorito?.produtoId ||
+            favorito?.idProduto;
+
+          return String(idFavorito) === String(produto.id);
+        });
+
+        if (ativo) setFavoritado(encontrado);
+      } catch (erroApi) {
+        console.error("Erro ao consultar favoritos:", erroApi);
+      }
+    }
+
+    verificarFavorito();
+
+    return () => {
+      ativo = false;
+    };
+  }, [usuario, carregandoAuth, produto?.id]);
+
+  // Adiciona ou remove o produto dos favoritos.
+  async function alternarFavorito() {
+    if (!produto || carregandoFavorito) return;
+
+    if (!usuario) {
+      abrirModalAutenticacao("favoritos");
+      return;
+    }
+
+    setErroSacola("");
+    setCarregandoFavorito(true);
+
+    try {
+      if (favoritado) {
+        await apiFetch(`/favoritos/${produto.id}`, {
+          method: "DELETE",
+        });
+
+        setFavoritado(false);
+      } else {
+        await apiFetch(`/favoritos/${produto.id}`, {
+          method: "POST",
+        });
+
+        setFavoritado(true);
+      }
+
+      window.dispatchEvent(new Event("favoritosAtualizados"));
+    } catch (erroApi) {
+      setErroSacola(
+        erroApi.message ||
+          "Não foi possível atualizar seus favoritos."
+      );
+    } finally {
+      setCarregandoFavorito(false);
+    }
   }
 
-  
-async function adicionarSacola() {
-  if (!produto || adicionando || esgotado) return;
+  async function adicionarSacola() {
+    if (!produto || adicionando || esgotado) return;
 
-  setAdicionando(true);
-  setAdicionado(false);
-  setErroSacola("");
+    if (!usuario) {
+      abrirModalAutenticacao("sacola");
+      return;
+    }
 
-  try {
-    await apiFetch("/sacola/itens", {
-      method: "POST",
-      body: JSON.stringify({
-        produtoId: produto.id,
-        quantidade,
-      }),
-    });
+    setAdicionando(true);
+    setAdicionado(false);
+    setErroSacola("");
 
-    setAdicionado(true);
+    try {
+      await apiFetch("/sacola/itens", {
+        method: "POST",
+        body: JSON.stringify({
+          produtoId: produto.id,
+          quantidade,
+        }),
+      });
 
-    window.dispatchEvent(new Event("carrinhoAtualizado"));
-  } catch (erroApi) {
-    setErroSacola(
-      erroApi.message ||
-        "Não foi possível adicionar o produto à sacola."
-    );
-  } finally {
-    setAdicionando(false);
+      setAdicionado(true);
+
+      window.dispatchEvent(new Event("carrinhoAtualizado"));
+    } catch (erroApi) {
+      setErroSacola(
+        erroApi.message ||
+          "Não foi possível adicionar o produto à sacola."
+      );
+    } finally {
+      setAdicionando(false);
+    }
   }
-}
 
-
-  if (carregando) {
+  if (carregando || carregandoAuth) {
     return (
       <main className="min-h-[60vh] bg-[#FCFAF5] px-5 py-24">
         <div className="mx-auto max-w-6xl animate-pulse">
@@ -234,7 +299,7 @@ async function adicionarSacola() {
       <main className="flex min-h-[60vh] items-center justify-center bg-[#FCFAF5] px-5 py-20 text-center">
         <div className="max-w-md">
           <p className="mb-3 text-xs uppercase tracking-[0.25em] text-[#968052]">
-            AURELIA
+            AURORA
           </p>
 
           <h1 className="font-serif text-3xl text-[#211C14]">
@@ -264,8 +329,8 @@ async function adicionarSacola() {
     typeof produto.categoria === "string"
       ? produto.categoria
       : produto.categoria?.nome ||
-      produto.categoria?.nomeCategoria ||
-      "";
+        produto.categoria?.nomeCategoria ||
+        "";
 
   const preco = Number(produto.preco);
   const precoOriginal = Number(
@@ -290,26 +355,19 @@ async function adicionarSacola() {
 
   return (
     <main className="min-h-screen bg-[#FCFAF5] text-[#211C14]">
-      <div className="mx-auto max-w-[1320px] px-5 pb-20 pt-8 sm:px-8 lg:px-12 lg:pt-12">
-        <nav className="mb-8 flex flex-wrap items-center gap-2 text-xs text-[#8B8173]">
-          <Link to="/" className="transition hover:text-[#968052]">
-            Início
-          </Link>
-          <span>/</span>
-          <Link
-            to="/produtos"
-            className="transition hover:text-[#968052]"
-          >
-            Produtos
-          </Link>
-          {categoria && (
-            <>
-              <span>/</span>
-              <span>{categoria}</span>
-            </>
-          )}
-        </nav>
+      <div className="max-md:hidden">
+        <FaixaNavegacao
+          mostrarVoltar={false}
+          itens={[
+            { label: "Início", to: "/" },
+            { label: "Produtos", to: "/produtos" },
+            ...(categoria ? [{ label: categoria }] : []),
+            { label: produto.nome },
+          ]}
+        />
+      </div>
 
+      <div className="mx-auto max-w-[1320px] px-5 pb-20 pt-8 sm:px-8 lg:px-12 lg:pt-12">
         <div className="grid items-start gap-10 lg:grid-cols-2 lg:gap-16">
           {/* Galeria */}
           <section className="min-w-0">
@@ -324,15 +382,17 @@ async function adicionarSacola() {
                 }}
               />
 
+              {/* Botão de favoritos mantido sobre a imagem */}
               <button
                 type="button"
                 onClick={alternarFavorito}
+                disabled={carregandoFavorito}
                 aria-label={
                   favoritado
                     ? "Remover dos favoritos"
                     : "Adicionar aos favoritos"
                 }
-                className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-[#FCFAF5]/90 transition hover:bg-white"
+                className="absolute right-4 top-4 flex h-11 w-11 items-center justify-center rounded-full bg-[#FCFAF5]/90 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <Heart
                   size={19}
@@ -360,10 +420,11 @@ async function adicionarSacola() {
                     type="button"
                     onClick={() => setImagemSelecionada(indice)}
                     aria-label={`Ver imagem ${indice + 1}`}
-                    className={`overflow-hidden border transition ${imagemSelecionada === indice
-                      ? "border-[#968052]"
-                      : "border-transparent opacity-70 hover:opacity-100"
-                      }`}
+                    className={`overflow-hidden border transition ${
+                      imagemSelecionada === indice
+                        ? "border-[#968052]"
+                        : "border-transparent opacity-70 hover:opacity-100"
+                    }`}
                   >
                     <img
                       src={imagem}
@@ -383,7 +444,7 @@ async function adicionarSacola() {
           {/* Informações */}
           <section className="pt-1 lg:sticky lg:top-8">
             <p className="text-[11px] uppercase tracking-[0.28em] text-[#968052]">
-              {produto.marca || "AURELIA"}
+              {produto.marca || "AURORA"}
             </p>
 
             <h1 className="mt-4 font-serif text-3xl leading-tight sm:text-4xl lg:text-5xl">
@@ -562,7 +623,7 @@ async function adicionarSacola() {
                 <div>
                   <p className="text-sm">Compra segura</p>
                   <p className="mt-1 text-xs leading-5 text-[#82796D]">
-                    Finalize seu pedido pelos canais oficiais da AURELIA.
+                    Finalize seu pedido pelos canais oficiais da AURORA.
                   </p>
                 </div>
               </div>
@@ -578,6 +639,12 @@ async function adicionarSacola() {
           </section>
         </div>
       </div>
+
+      <ModalAutenticacao
+        aberto={modalAutenticacao}
+        onFechar={() => setModalAutenticacao(false)}
+        motivo={motivoAutenticacao}
+      />
     </main>
   );
 }
