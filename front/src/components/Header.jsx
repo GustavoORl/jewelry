@@ -30,7 +30,7 @@ import { useAuth } from "../contexts/AuthContext.jsx";
 import { apiFetch } from "../services/api.js";
 
 const LIMITE_CATEGORIAS = 6;
-
+const LIMITE_BUSCA = 60;
 const imagemLogo = "A";
 
 function extrairLista(resultado, chave) {
@@ -175,15 +175,14 @@ export default function Header() {
     function handleSearch(event) {
         event.preventDefault();
 
-        const termo = busca.trim();
+        const termo = busca.trim().slice(0, LIMITE_BUSCA);
 
         if (!termo) return;
 
+        setBusca(termo);
         setMenuAberto(false);
 
-        navigate(
-            `/produtos?busca=${encodeURIComponent(termo)}`
-        );
+        navigate(`/produtos?busca=${encodeURIComponent(termo)}`);
     }
 
     async function handleSair() {
@@ -249,10 +248,9 @@ export default function Header() {
 
     function classesCategoria(ativa) {
         return `relative whitespace-nowrap py-1 text-sm transition-colors duration-300
-            ${
-                ativa
-                    ? "font-medium text-[#968052] after:scale-x-100"
-                    : "text-[#211C14] after:scale-x-0 hover:text-[#968052] hover:after:scale-x-100"
+            ${ativa
+                ? "font-medium text-[#968052] after:scale-x-100"
+                : "text-[#211C14] after:scale-x-0 hover:text-[#968052] hover:after:scale-x-100"
             }
             after:absolute after:-bottom-1 after:left-0 after:h-[2px]
             after:w-full after:origin-center after:bg-[#B9975B]
@@ -330,8 +328,9 @@ export default function Header() {
                         <input
                             type="search"
                             value={busca}
+                            maxLength={LIMITE_BUSCA}
                             onChange={(event) =>
-                                setBusca(event.target.value)
+                                setBusca(event.target.value.slice(0, LIMITE_BUSCA))
                             }
                             placeholder="Buscar por colar, brinco, ouro 18k..."
                             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-[#918879]"
@@ -620,8 +619,9 @@ export default function Header() {
                     <input
                         type="search"
                         value={busca}
+                        maxLength={LIMITE_BUSCA}
                         onChange={(event) =>
-                            setBusca(event.target.value)
+                            setBusca(event.target.value.slice(0, LIMITE_BUSCA))
                         }
                         placeholder="Buscar joias..."
                         aria-label="Pesquisar produtos"
@@ -689,11 +689,10 @@ export default function Header() {
                             type="button"
                             onClick={abrirProdutos}
                             aria-current={produtosAtivo ? "page" : undefined}
-                            className={`relative border-b border-[#E7E0CE]/70 px-2 py-3 text-left text-sm transition-colors ${
-                                produtosAtivo
+                            className={`relative border-b border-[#E7E0CE]/70 px-2 py-3 text-left text-sm transition-colors ${produtosAtivo
                                     ? "font-medium text-[#968052]"
                                     : "text-[#211C14] hover:bg-[#F3EFE3]"
-                            }`}
+                                }`}
                         >
                             Produtos
 
@@ -716,11 +715,10 @@ export default function Header() {
                                     aria-current={
                                         ativa ? "page" : undefined
                                     }
-                                    className={`relative border-b border-[#E7E0CE]/70 px-2 py-3 text-left text-sm transition-colors ${
-                                        ativa
+                                    className={`relative border-b border-[#E7E0CE]/70 px-2 py-3 text-left text-sm transition-colors ${ativa
                                             ? "font-medium text-[#968052]"
                                             : "text-[#211C14] hover:bg-[#F3EFE3]"
-                                    }`}
+                                        }`}
                                 >
                                     {categoria.nome}
 

@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -10,6 +9,9 @@ import {
     X,
 } from "lucide-react";
 
+import FaixaNavegacao from "../components/common/FaixaNavegacao";
+import ModalAutenticacao from "../components/common/ModalAutenticacao";
+import { useAuth } from "../contexts/AuthContext";
 import { apiFetch } from "../services/api.js";
 
 const imagemPadrao =
@@ -192,6 +194,8 @@ function CardProduto({
 export default function ListagemProdutos() {
     const [searchParams, setSearchParams] = useSearchParams();
 
+    const { usuario, carregandoAuth } = useAuth();
+
     const buscaUrl = searchParams.get("busca") || "";
     const categoriaUrl = searchParams.get("categoria") || "";
 
@@ -215,9 +219,15 @@ export default function ListagemProdutos() {
     const [processandoSacola, setProcessandoSacola] = useState([]);
     const [mensagem, setMensagem] = useState("");
 
-    // IMPORTANTE:
-    // As categorias e os materiais disponíveis são calculados
-    // antes de qualquer efeito que dependa deles.
+    // Modal de autenticação.
+
+    const [modalAutenticacao, setModalAutenticacao] = useState(false);
+    const [motivoAutenticacao, setMotivoAutenticacao] = useState("geral");
+
+    function abrirModalAutenticacao(motivo) {
+        setMotivoAutenticacao(motivo);
+        setModalAutenticacao(true);
+    }
 
     const categoriasDisponiveis = useMemo(() => {
         const nomes = [
@@ -305,33 +315,65 @@ export default function ListagemProdutos() {
     // Carregar favoritos do usuário autenticado.
 
     const carregarFavoritos = useCallback(async () => {
+        if (!usuario) {
+            setFavoritos([]);
+            return;
+        }
+
         try {
             const resultado = await apiFetch("/favoritos");
-
             const lista = extrairLista(resultado, "favoritos");
 
             setFavoritos(
                 lista
-                    .map((item) => item.produtoId || item.produto?.id)
+                    .map((item) => {
+                        const produto = item?.produto || item;
+
+                        return (
+                            produto?.id ||
+                            item?.produtoId ||
+                            item?.idProduto
+                        );
+                    })
                     .filter(Boolean)
             );
         } catch (error) {
-            if (error.status === 401 || error.status === 403) {
-                setFavoritos([]);
-                return;
-            }
-
             console.error("Erro ao carregar favoritos:", error);
+            setFavoritos([]);
         }
-    }, []);
+    }, [usuario]);
 
     useEffect(() => {
         carregarDados();
     }, [carregarDados]);
 
     useEffect(() => {
+        if (carregandoAuth) return;
+
         carregarFavoritos();
-    }, [carregarFavoritos]);
+    }, [carregandoAuth, carregarFavoritos]);
+
+    // Sincronizar favoritos com outras páginas.
+
+    useEffect(() => {
+        function atualizarFavoritos() {
+            if (!carregandoAuth) {
+                carregarFavoritos();
+            }
+        }
+
+        window.addEventListener(
+            "favoritosAtualizados",
+            atualizarFavoritos
+        );
+
+        return () => {
+            window.removeEventListener(
+                "favoritosAtualizados",
+                atualizarFavoritos
+            );
+        };
+    }, [carregandoAuth, carregarFavoritos]);
 
     // Sincronizar busca com a URL.
 
@@ -373,6 +415,11 @@ export default function ListagemProdutos() {
     // Alternar favorito.
 
     async function alternarFavorito(produtoId) {
+        if (!usuario) {
+            abrirModalAutenticacao("favoritos");
+            return;
+        }
+
         if (processandoFavoritos.includes(produtoId)) return;
 
         setProcessandoFavoritos((atuais) => [
@@ -392,6 +439,10 @@ export default function ListagemProdutos() {
                     atuais.filter((id) => id !== produtoId)
                 );
 
+                window.dispatchEvent(
+                    new Event("favoritosAtualizados")
+                );
+
                 setMensagem("Produto removido dos favoritos.");
             } else {
                 await apiFetch(`/favoritos/${produtoId}`, {
@@ -404,6 +455,10 @@ export default function ListagemProdutos() {
                         : [...atuais, produtoId]
                 );
 
+                window.dispatchEvent(
+                    new Event("favoritosAtualizados")
+                );
+
                 setMensagem("Produto adicionado aos favoritos.");
             }
         } catch (error) {
@@ -411,7 +466,7 @@ export default function ListagemProdutos() {
                 error.status === 401 || error.status === 403
                     ? "Entre na sua conta para favoritar produtos."
                     : error.message ||
-                        "Não foi possível atualizar seus favoritos."
+                    "Não foi possível atualizar seus favoritos."
             );
         } finally {
             setProcessandoFavoritos((atuais) =>
@@ -423,6 +478,11 @@ export default function ListagemProdutos() {
     // Adicionar produto à sacola.
 
     async function adicionarSacola(produtoId) {
+        if (!usuario) {
+            abrirModalAutenticacao("sacola");
+            return;
+        }
+
         if (processandoSacola.includes(produtoId)) return;
 
         setProcessandoSacola((atuais) => [
@@ -443,13 +503,17 @@ export default function ListagemProdutos() {
 
             setSacola((atuais) => [...atuais, produtoId]);
 
+            window.dispatchEvent(
+                new Event("carrinhoAtualizado")
+            );
+
             setMensagem("Produto adicionado à sacola!");
         } catch (error) {
             setMensagem(
                 error.status === 401 || error.status === 403
                     ? "Entre na sua conta para adicionar produtos à sacola."
                     : error.message ||
-                        "Não foi possível adicionar o produto à sacola."
+                    "Não foi possível adicionar o produto à sacola."
             );
         } finally {
             setProcessandoSacola((atuais) =>
@@ -475,7 +539,7 @@ export default function ListagemProdutos() {
             const correspondeCategoria =
                 categoriaAtiva === "Todas" ||
                 normalizarNome(produto.categoriaNome) ===
-                    normalizarNome(categoriaAtiva);
+                normalizarNome(categoriaAtiva);
 
             const correspondeMaterial =
                 materialAtivo === "Todos" ||
@@ -556,7 +620,7 @@ export default function ListagemProdutos() {
             novosParametros.set(
                 "categoria",
                 categoriaEncontrada?.slug ||
-                    gerarSlugCategoria(categoria)
+                gerarSlugCategoria(categoria)
             );
         }
 
@@ -586,23 +650,24 @@ export default function ListagemProdutos() {
         <main className="min-h-screen bg-[#FCFAF6] text-[#211C14]">
             {/* Cabeçalho editorial */}
 
-            <section className="border-b border-[#EAE0CE] bg-[#F7F2E8] px-5 py-2 sm:px-8 lg:px-12">
-                <div className="mx-auto flex max-w-[1320px] items-center justify-between">
-                    <p className="text-[10px] font-medium uppercase tracking-[0.3em] text-[#A47B43]">
-                        AURELIA · Nossa coleção
-                    </p>
-
-                    <div className="text-sm text-[#847A6C]">
-                        {carregando
+            <div className="max-md:hidden">
+                <FaixaNavegacao
+                    mostrarVoltar={false}
+                    itens={[
+                        { label: "Início", to: "/" },
+                        { label: "Produtos" },
+                    ]}
+                    informacaoDireita={
+                        carregando
                             ? "Carregando coleção..."
                             : `${produtosFiltrados.length} ${
                                 produtosFiltrados.length === 1
                                     ? "peça encontrada"
                                     : "peças encontradas"
-                            }`}
-                    </div>
-                </div>
-            </section>
+                            }`
+                    }
+                />
+            </div>
 
             {/* Mensagem de feedback */}
 
@@ -946,18 +1011,25 @@ export default function ListagemProdutos() {
             {sacola.length > 0 && (
                 <div className="fixed bottom-5 right-5 z-40">
                     <Link to="/sacola">
-                    <div className="flex items-center gap-3 rounded-full bg-[#211C14] px-5 py-3.5 text-sm text-white shadow-xl">
-                        <ShoppingBag size={17} />
-                        
-                        <span>
-                            {sacola.length}{" "}
-                            {sacola.length === 1 ? "item" : "itens"} na sacola
-                        </span>
-                        
-                    </div>
+                        <div className="flex items-center gap-3 rounded-full bg-[#211C14] px-5 py-3.5 text-sm text-white shadow-xl">
+                            <ShoppingBag size={17} />
+
+                            <span>
+                                {sacola.length}{" "}
+                                {sacola.length === 1 ? "item" : "itens"} na sacola
+                            </span>
+                        </div>
                     </Link>
                 </div>
             )}
+
+            {/* Modal de autenticação */}
+
+            <ModalAutenticacao
+                aberto={modalAutenticacao}
+                onFechar={() => setModalAutenticacao(false)}
+                motivo={motivoAutenticacao}
+            />
         </main>
     );
 }

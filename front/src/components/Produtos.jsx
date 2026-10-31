@@ -9,6 +9,8 @@ import {
 } from "lucide-react";
 
 import { apiFetch } from "../services/api";
+import { useAuth } from "../contexts/AuthContext";
+import ModalAutenticacao from "../components/common/ModalAutenticacao";
 
 const filtrosPrincipais = [
   "Todos",
@@ -104,7 +106,20 @@ function selecionarProdutosAleatorios(produtos, quantidade = 4) {
   return listaEmbaralhada.slice(0, quantidade);
 }
 
+function extrairListaFavoritos(resultado) {
+  if (Array.isArray(resultado)) return resultado;
+  if (Array.isArray(resultado?.favoritos)) return resultado.favoritos;
+  if (Array.isArray(resultado?.dados?.favoritos)) {
+    return resultado.dados.favoritos;
+  }
+  if (Array.isArray(resultado?.dados)) return resultado.dados;
+
+  return [];
+}
+
 export default function Produtos() {
+  const { usuario, carregandoAuth } = useAuth();
+
   const [produtos, setProdutos] = useState([]);
   const [filtroAtivo, setFiltroAtivo] = useState("Todos");
   const [favoritos, setFavoritos] = useState([]);
@@ -119,10 +134,18 @@ export default function Produtos() {
   const [processandoFavoritos, setProcessandoFavoritos] = useState([]);
   const [processandoSacola, setProcessandoSacola] = useState([]);
 
+  // Modal de autenticação.
+  const [modalAutenticacao, setModalAutenticacao] = useState(false);
+  const [motivoAutenticacao, setMotivoAutenticacao] = useState("geral");
+
+  function abrirModalAutenticacao(motivo) {
+    setMotivoAutenticacao(motivo);
+    setModalAutenticacao(true);
+  }
+
   // Estado da notificação flutuante.
   const [notificacao, setNotificacao] = useState(null);
 
-  // Controla a exibição da notificação.
   const mostrarNotificacao = useCallback((texto, tipo = "sucesso") => {
     setNotificacao({
       id: Date.now(),
@@ -132,7 +155,6 @@ export default function Produtos() {
   }, []);
 
   // A notificação permanece visível por 2 segundos.
-  // Depois disso, inicia a animação de saída de 2 segundos.
   useEffect(() => {
     if (!notificacao) return;
 
@@ -194,20 +216,30 @@ export default function Produtos() {
     }
   }, []);
 
-  // Carrega os favoritos salvos do usuário.
+  // Carrega os favoritos somente quando o usuário estiver autenticado.
   const carregarFavoritos = useCallback(async () => {
+    if (!usuario) {
+      setFavoritos([]);
+      return;
+    }
+
     try {
       const resultado = await apiFetch("/favoritos");
+      const lista = extrairListaFavoritos(resultado);
 
-      const lista = Array.isArray(resultado)
-        ? resultado
-        : resultado?.favoritos || resultado?.dados || [];
+      const idsFavoritos = lista
+        .map((item) => {
+          const produtoFavorito = item?.produto || item;
 
-      setFavoritos(
-        lista
-          .map((item) => item.produtoId || item.produto?.id)
-          .filter(Boolean)
-      );
+          return (
+            produtoFavorito?.id ||
+            item?.produtoId ||
+            item?.idProduto
+          );
+        })
+        .filter(Boolean);
+
+      setFavoritos(idsFavoritos);
     } catch (error) {
       console.error(
         "Não foi possível carregar os favoritos:",
@@ -216,12 +248,38 @@ export default function Produtos() {
 
       setFavoritos([]);
     }
-  }, []);
+  }, [usuario]);
 
+  // Carrega os produtos ao montar a página.
   useEffect(() => {
     carregarProdutos();
+  }, [carregarProdutos]);
+
+  // Aguarda a verificação de autenticação antes de buscar favoritos.
+  useEffect(() => {
+    if (carregandoAuth) return;
+
     carregarFavoritos();
-  }, [carregarProdutos, carregarFavoritos]);
+  }, [carregandoAuth, carregarFavoritos]);
+
+  // Atualiza os favoritos quando outra parte da aplicação os modifica.
+  useEffect(() => {
+    function atualizarFavoritos() {
+      carregarFavoritos();
+    }
+
+    window.addEventListener(
+      "favoritosAtualizados",
+      atualizarFavoritos
+    );
+
+    return () => {
+      window.removeEventListener(
+        "favoritosAtualizados",
+        atualizarFavoritos
+      );
+    };
+  }, [carregarFavoritos]);
 
   // Evita filtros duplicados.
   const filtrosVisiveis = [
@@ -250,6 +308,12 @@ export default function Produtos() {
 
   // Adiciona ou remove um produto dos favoritos.
   async function alternarFavorito(id) {
+    // Visitante precisa entrar ou criar uma conta.
+    if (!usuario) {
+      abrirModalAutenticacao("favoritos");
+      return;
+    }
+
     if (processandoFavoritos.includes(id)) return;
 
     setProcessandoFavoritos((atuais) => [
@@ -257,7 +321,9 @@ export default function Produtos() {
       id,
     ]);
 
-    const jaEhFavorito = favoritos.includes(id);
+    const jaEhFavorito = favoritos.some(
+      (produtoId) => String(produtoId) === String(id)
+    );
 
     try {
       if (jaEhFavorito) {
@@ -266,7 +332,9 @@ export default function Produtos() {
         });
 
         setFavoritos((atuais) =>
-          atuais.filter((produtoId) => produtoId !== id)
+          atuais.filter(
+            (produtoId) => String(produtoId) !== String(id)
+          )
         );
 
         mostrarNotificacao("Produto removido dos favoritos.");
@@ -276,13 +344,17 @@ export default function Produtos() {
         });
 
         setFavoritos((atuais) =>
-          atuais.includes(id)
+          atuais.some(
+            (produtoId) => String(produtoId) === String(id)
+          )
             ? atuais
             : [...atuais, id]
         );
 
         mostrarNotificacao("Produto adicionado aos favoritos.");
       }
+
+      window.dispatchEvent(new Event("favoritosAtualizados"));
     } catch (error) {
       mostrarNotificacao(
         error.message ||
@@ -291,13 +363,21 @@ export default function Produtos() {
       );
     } finally {
       setProcessandoFavoritos((atuais) =>
-        atuais.filter((produtoId) => produtoId !== id)
+        atuais.filter(
+          (produtoId) => String(produtoId) !== String(id)
+        )
       );
     }
   }
 
   // Adiciona um produto à sacola do usuário.
   async function adicionarSacola(id) {
+    // Visitante precisa entrar ou criar uma conta.
+    if (!usuario) {
+      abrirModalAutenticacao("sacola");
+      return;
+    }
+
     if (processandoSacola.includes(id)) return;
 
     setProcessandoSacola((atuais) => [
@@ -319,6 +399,8 @@ export default function Produtos() {
         id,
       ]);
 
+      window.dispatchEvent(new Event("carrinhoAtualizado"));
+
       mostrarNotificacao("Produto adicionado à sacola!");
     } catch (error) {
       mostrarNotificacao(
@@ -328,7 +410,9 @@ export default function Produtos() {
       );
     } finally {
       setProcessandoSacola((atuais) =>
-        atuais.filter((produtoId) => produtoId !== id)
+        atuais.filter(
+          (produtoId) => String(produtoId) !== String(id)
+        )
       );
     }
   }
@@ -492,7 +576,10 @@ export default function Produtos() {
               ) : (
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 lg:gap-5">
                   {produtosFiltrados.map((produto) => {
-                    const favorito = favoritos.includes(produto.id);
+                    const favorito = favoritos.some(
+                      (idFavorito) =>
+                        String(idFavorito) === String(produto.id)
+                    );
 
                     const favoritoProcessando =
                       processandoFavoritos.includes(produto.id);
@@ -644,6 +731,13 @@ export default function Produtos() {
           )}
         </div>
       </section>
+
+      {/* Modal de autenticação reutilizável */}
+      <ModalAutenticacao
+        aberto={modalAutenticacao}
+        onFechar={() => setModalAutenticacao(false)}
+        motivo={motivoAutenticacao}
+      />
     </>
   );
 }

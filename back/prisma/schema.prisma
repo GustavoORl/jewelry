@@ -20,9 +20,9 @@ model Usuario {
   ultimoAcessoEm      DateTime?
   carrinho            Carrinho?
   enderecos           Endereco[]
+  favoritos           Favorito[]
   pedidos             Pedido[]
   sessoesRefreshToken SessaoRefreshToken[]
-  favoritos           Favorito[]
 }
 
 model Endereco {
@@ -79,12 +79,12 @@ model Produto {
   ativo         Boolean           @default(true)
   criadoEm      DateTime          @default(now())
   atualizadoEm  DateTime          @updatedAt
+  favoritos     Favorito[]
   imagens       ImagemProduto[]
   itensCarrinho ItemCarrinho[]
   itensPedido   ItemPedido[]
   categoria     Categoria         @relation(fields: [categoriaId], references: [id])
   materiais     ProdutoMaterial[]
-  favoritos     Favorito[]
 
   @@index([categoriaId])
   @@index([ativo])
@@ -157,8 +157,8 @@ model Pedido {
   criadoEm           DateTime     @default(now())
   atualizadoEm       DateTime     @updatedAt
   itens              ItemPedido[]
-  usuario            Usuario      @relation(fields: [usuarioId], references: [id])
   pagamentos         Pagamento[]
+  usuario            Usuario      @relation(fields: [usuarioId], references: [id])
 
   @@index([usuarioId])
   @@index([status])
@@ -178,6 +178,51 @@ model ItemPedido {
   @@index([produtoId])
 }
 
+model SessaoRefreshToken {
+  id         String    @id @default(cuid())
+  usuarioId  String
+  tokenHash  String    @unique
+  expiraEm   DateTime
+  revogadoEm DateTime?
+  criadoEm   DateTime  @default(now())
+  usuario    Usuario   @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId])
+  @@index([expiraEm])
+}
+
+model Favorito {
+  usuarioId String
+  produtoId String
+  criadoEm  DateTime @default(now())
+  produto   Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@id([usuarioId, produtoId])
+  @@index([produtoId])
+}
+
+model Pagamento {
+  id                  String            @id @default(cuid())
+  pedidoId            String
+  provedor            ProvedorPagamento @default(MERCADO_PAGO)
+  metodo              MetodoPagamento
+  status              StatusPagamento   @default(PENDENTE)
+  valor               Decimal           @db.Decimal(10, 2)
+  provedorPagamentoId String?           @unique
+  provedorOrdemId     String?
+  referenciaExterna   String            @unique
+  chaveIdempotencia   String            @unique
+  detalhes            Json?
+  criadoEm            DateTime          @default(now())
+  atualizadoEm        DateTime          @updatedAt
+  pedido              Pedido            @relation(fields: [pedidoId], references: [id])
+
+  @@index([pedidoId])
+  @@index([status])
+  @@index([provedorOrdemId])
+}
+
 enum TipoUsuario {
   CLIENTE
   ADMIN
@@ -190,32 +235,6 @@ enum StatusPedido {
   ENVIADO
   ENTREGUE
   CANCELADO
-}
-
-model SessaoRefreshToken {
-  id         String    @id @default(cuid())
-  usuarioId  String
-  tokenHash  String    @unique
-  expiraEm   DateTime
-  revogadoEm DateTime?
-  criadoEm   DateTime  @default(now())
-
-  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-
-  @@index([usuarioId])
-  @@index([expiraEm])
-}
-
-model Favorito {
-  usuarioId String
-  produtoId String
-  criadoEm  DateTime @default(now())
-
-  usuario Usuario @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
-  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
-
-  @@id([usuarioId, produtoId])
-  @@index([produtoId])
 }
 
 enum StatusPagamento {
@@ -237,32 +256,4 @@ enum MetodoPagamento {
 
 enum ProvedorPagamento {
   MERCADO_PAGO
-}
-
-model Pagamento {
-  id       String @id @default(cuid())
-  pedidoId String
-
-  provedor ProvedorPagamento @default(MERCADO_PAGO)
-  metodo   MetodoPagamento
-  status   StatusPagamento   @default(PENDENTE)
-
-  valor Decimal @db.Decimal(10, 2)
-
-  provedorPagamentoId String? @unique
-  provedorOrdemId     String?
-
-  referenciaExterna String @unique
-  chaveIdempotencia String @unique
-
-  detalhes Json?
-
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-
-  pedido Pedido @relation(fields: [pedidoId], references: [id], onDelete: Restrict)
-
-  @@index([pedidoId])
-  @@index([status])
-  @@index([provedorOrdemId])
 }
