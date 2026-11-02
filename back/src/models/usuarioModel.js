@@ -63,3 +63,63 @@ export async function desativarUsuarioModel(id) {
     },
   });
 }
+
+export async function atualizarPerfilUsuarioModel(
+  id,
+  dados
+) {
+  return prisma.usuario.update({
+    where: {
+      id,
+    },
+
+    data: {
+      nome: dados.nome,
+      email: dados.email,
+      telefone: dados.telefone,
+    },
+
+    select: {
+      id: true,
+      nome: true,
+      email: true,
+      telefone: true,
+      tipo: true,
+      ativo: true,
+      criadoEm: true,
+    },
+  });
+}
+
+
+export async function buscarCredenciaisUsuarioModel(
+  id
+) {
+  return prisma.usuario.findUnique({
+    where: {
+      id,
+    },
+
+    select: {
+      id: true,
+      senhaHash: true,
+      ativo: true,
+    },
+  });
+}
+
+
+export async function atualizarSenhaUsuarioModel(
+  id,
+  senhaHash
+) {
+  return prisma.usuario.update({
+    where: {
+      id,
+    },
+
+    data: {
+      senhaHash,
+    },
+  });
+}

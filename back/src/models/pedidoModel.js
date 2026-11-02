@@ -1,10 +1,17 @@
 import { prisma } from "../config/prisma.js";
 
+/**
+ * =========================================
+ * BUSCAR SACOLA PARA CRIAÇÃO DO PEDIDO
+ * =========================================
+ */
+
 export async function buscarSacolaParaPedido(usuarioId) {
   return prisma.carrinho.findUnique({
     where: {
       usuarioId,
     },
+
     include: {
       itens: {
         include: {
@@ -20,16 +27,29 @@ export async function buscarSacolaParaPedido(usuarioId) {
 }
 
 
+/**
+ * =========================================
+ * CRIAR PEDIDO
+ * =========================================
+ */
+
 export async function criarPedidoComItens({
   usuarioId,
   endereco,
   itensSelecionados,
 }) {
   return prisma.$transaction(async (tx) => {
+    /**
+     * ---------------------------------------
+     * 1. BUSCAR ITENS SELECIONADOS
+     * ---------------------------------------
+     */
+
     const sacola = await tx.carrinho.findUnique({
       where: {
         usuarioId,
       },
+
       include: {
         itens: {
           where: {
@@ -41,296 +61,1068 @@ export async function criarPedidoComItens({
       },
     });
 
-    if (!sacola || sacola.itens.length === 0) {
+
+    if (
+      !sacola ||
+      sacola.itens.length === 0
+    ) {
       const error = new Error(
         "Nenhum dos itens selecionados foi encontrado na sua sacola."
       );
+
       error.status = 400;
+
       throw error;
     }
 
-    // Garante que todos os IDs enviados pertencem à sacola do usuário.
-    if (sacola.itens.length !== itensSelecionados.length) {
+
+    /**
+     * Garante que todos os IDs enviados
+     * realmente pertencem à sacola.
+     */
+
+    if (
+      sacola.itens.length !==
+      itensSelecionados.length
+    ) {
       const error = new Error(
         "Um ou mais itens selecionados não pertencem à sua sacola ou não estão mais disponíveis nela."
       );
+
       error.status = 400;
+
       throw error;
     }
+
+
+    /**
+     * ---------------------------------------
+     * 2. BUSCAR PRODUTOS
+     * ---------------------------------------
+     */
 
     const produtos = await tx.produto.findMany({
       where: {
         id: {
-          in: sacola.itens.map((item) => item.produtoId),
+          in: sacola.itens.map(
+            (item) => item.produtoId
+          ),
         },
       },
+
       include: {
         categoria: true,
       },
     });
 
-    if (produtos.length !== sacola.itens.length) {
+
+    if (
+      produtos.length !==
+      sacola.itens.length
+    ) {
       const error = new Error(
         "Um ou mais produtos não estão mais disponíveis."
       );
+
       error.status = 400;
+
       throw error;
     }
 
+
     const produtosPorId = new Map(
-      produtos.map((produto) => [produto.id, produto])
+      produtos.map(
+        (produto) => [
+          produto.id,
+          produto,
+        ]
+      )
     );
+
+
+    /**
+     * ---------------------------------------
+     * 3. CALCULAR PEDIDO
+     * ---------------------------------------
+     */
 
     let totalCalculado = 0;
 
-    const itensPedido = sacola.itens.map((item) => {
-      const produto = produtosPorId.get(item.produtoId);
+
+    const itensPedido = sacola.itens.map(
+      (item) => {
+        const produto =
+          produtosPorId.get(
+            item.produtoId
+          );
+
+
+        if (
+          !produto ||
+          !produto.ativo ||
+          !produto.categoria.ativo ||
+          produto.estoque <
+          item.quantidade
+        ) {
+          const error = new Error(
+            `O produto "${produto?.nome ??
+            "selecionado"
+            }" não está disponível na quantidade solicitada.`
+          );
+
+          error.status = 400;
+
+          throw error;
+        }
+
+
+        const precoUnitario =
+          Number(
+            produto.preco
+          );
+
+
+        totalCalculado +=
+          precoUnitario *
+          item.quantidade;
+
+
+        return {
+          idCarrinho:
+            item.id,
+
+          produtoId:
+            produto.id,
+
+          nomeProduto:
+            produto.nome,
+
+          quantidade:
+            item.quantidade,
+
+          precoUnitario,
+        };
+      }
+    );
+
+
+    /**
+     * ---------------------------------------
+     * 4. RESERVAR ESTOQUE
+     * ---------------------------------------
+     *
+     * updateMany é usado aqui porque permite
+     * fazer a atualização condicional:
+     *
+     * estoque >= quantidade
+     *
+     * Isso reduz problemas de concorrência.
+     */
+
+    for (
+      const item of itensPedido
+    ) {
+      const resultado =
+        await tx.produto.updateMany({
+          where: {
+            id:
+              item.produtoId,
+
+            ativo:
+              true,
+
+            categoria: {
+              ativo:
+                true,
+            },
+
+            estoque: {
+              gte:
+                item.quantidade,
+            },
+          },
+
+          data: {
+            estoque: {
+              decrement:
+                item.quantidade,
+            },
+          },
+        });
+
 
       if (
-        !produto ||
-        !produto.ativo ||
-        !produto.categoria.ativo ||
-        produto.estoque < item.quantidade
+        resultado.count !== 1
       ) {
-        const error = new Error(
-          `O produto "${produto?.nome ?? "selecionado"}" não está disponível na quantidade solicitada.`
-        );
-        error.status = 400;
-        throw error;
-      }
-
-      const precoUnitario = Number(produto.preco);
-
-      totalCalculado += precoUnitario * item.quantidade;
-
-      return {
-        idCarrinho: item.id,
-        produtoId: produto.id,
-        nomeProduto: produto.nome,
-        quantidade: item.quantidade,
-        precoUnitario,
-      };
-    });
-
-    // Reserva o estoque de forma condicional.
-    for (const item of itensPedido) {
-      const resultado = await tx.produto.updateMany({
-        where: {
-          id: item.produtoId,
-          ativo: true,
-          categoria: {
-            ativo: true,
-          },
-          estoque: {
-            gte: item.quantidade,
-          },
-        },
-        data: {
-          estoque: {
-            decrement: item.quantidade,
-          },
-        },
-      });
-
-      if (resultado.count !== 1) {
         const error = new Error(
           `Estoque insuficiente ou produto indisponível: "${item.nomeProduto}".`
         );
+
         error.status = 409;
+
         throw error;
       }
     }
 
-    const pedido = await tx.pedido.create({
-      data: {
-        usuarioId,
-        status: "PENDENTE",
-        valorTotal: totalCalculado.toFixed(2),
 
-        destinatario: endereco.destinatario,
-        cepEntrega: endereco.cep,
-        ruaEntrega: endereco.rua,
-        numeroEntrega: endereco.numero,
-        complementoEntrega: endereco.complemento || null,
-        bairroEntrega: endereco.bairro,
-        cidadeEntrega: endereco.cidade,
-        estadoEntrega: endereco.estado,
+    /**
+     * ---------------------------------------
+     * 5. CRIAR PEDIDO
+     * ---------------------------------------
+     */
 
-        itens: {
-          create: itensPedido.map((item) => ({
-            produtoId: item.produtoId,
-            nomeProduto: item.nomeProduto,
-            quantidade: item.quantidade,
-            precoUnitario: item.precoUnitario.toFixed(2),
-          })),
-        },
+    /**
+ * Prazo para conclusão do pagamento.
+ *
+ * O estoque ficará reservado durante
+ * esse período.
+ */
+    const TEMPO_PAGAMENTO_MINUTOS = 30;
+
+    const expiraEm = new Date(
+      Date.now() +
+      TEMPO_PAGAMENTO_MINUTOS * 60 * 1000
+    );
+
+
+    const pedido =
+  await tx.pedido.create({
+    data: {
+      usuarioId,
+
+      status: "PENDENTE",
+
+      expiraEm,
+
+      valorTotal:
+        totalCalculado.toFixed(2),
+
+      destinatario:
+        endereco.destinatario,
+
+      cepEntrega:
+        endereco.cep,
+
+      ruaEntrega:
+        endereco.rua,
+
+      numeroEntrega:
+        endereco.numero,
+
+      complementoEntrega:
+        endereco.complemento || null,
+
+      bairroEntrega:
+        endereco.bairro,
+
+      cidadeEntrega:
+        endereco.cidade,
+
+      estadoEntrega:
+        endereco.estado,
+
+      itens: {
+        create:
+          itensPedido.map(
+            (item) => ({
+              produtoId:
+                item.produtoId,
+
+              nomeProduto:
+                item.nomeProduto,
+
+              quantidade:
+                item.quantidade,
+
+              precoUnitario:
+                item.precoUnitario.toFixed(2),
+            })
+          ),
       },
-      include: {
-        itens: true,
-      },
-    });
+    },
 
-    // Remove somente os itens que foram incluídos no pedido.
+    include: {
+      itens: true,
+    },
+  });
+
+
+    /**
+     * ---------------------------------------
+     * 6. REMOVER ITENS DA SACOLA
+     * ---------------------------------------
+     *
+     * Remove somente os itens utilizados
+     * neste pedido.
+     */
+
     await tx.itemCarrinho.deleteMany({
       where: {
         id: {
-          in: itensPedido.map((item) => item.idCarrinho),
+          in:
+            itensPedido.map(
+              (item) =>
+                item.idCarrinho
+            ),
         },
-        carrinhoId: sacola.id,
+
+        carrinhoId:
+          sacola.id,
       },
     });
+
 
     return pedido;
   });
 }
 
 
-// Lista somente os pedidos do cliente informado.
-export async function listarPedidosDoUsuario(usuarioId) {
+/**
+ * =========================================
+ * LISTAR PEDIDOS DO CLIENTE
+ * =========================================
+ */
+
+export async function listarPedidosDoUsuario(
+  usuarioId
+) {
   return prisma.pedido.findMany({
     where: {
       usuarioId,
     },
+
     orderBy: {
       criadoEm: "desc",
     },
+
     select: {
       id: true,
+
       status: true,
+
       valorTotal: true,
+
       criadoEm: true,
+
+      expiraEm: true,
+
       destinatario: true,
+
+
+      /**
+       * Itens do pedido.
+       *
+       * Além dos dados salvos no momento da compra,
+       * buscamos a primeira imagem atual do produto
+       * e seu slug.
+       */
       itens: {
         select: {
           id: true,
+
+          produtoId: true,
+
           nomeProduto: true,
+
           quantidade: true,
+
           precoUnitario: true,
+
+          produto: {
+            select: {
+              slug: true,
+
+              imagens: {
+                orderBy: {
+                  posicao: "asc",
+                },
+
+                take: 1,
+
+                select: {
+                  url: true,
+
+                  textoAlternativo: true,
+                },
+              },
+            },
+          },
+        },
+      },
+
+
+      /**
+       * Retornamos também os pagamentos
+       * para que a interface possa conhecer
+       * a situação financeira do pedido.
+       */
+      pagamentos: {
+        orderBy: {
+          criadoEm: "desc",
+        },
+
+        select: {
+          id: true,
+
+          metodo: true,
+
+          status: true,
+
+          valor: true,
+
+          criadoEm: true,
         },
       },
     },
   });
 }
 
-// Busca os detalhes de um pedido pertencente ao cliente informado.
-export async function buscarPedidoDoUsuario(usuarioId, pedidoId) {
+
+/**
+ * =========================================
+ * BUSCAR DETALHES DO PEDIDO DO CLIENTE
+ * =========================================
+ */
+
+export async function buscarPedidoDoUsuario(
+  usuarioId,
+  pedidoId
+) {
   return prisma.pedido.findFirst({
     where: {
-      id: pedidoId,
+      id:
+        pedidoId,
+
       usuarioId,
     },
+
+
     include: {
       itens: {
         select: {
           id: true,
-          produtoId: true,
-          nomeProduto: true,
-          quantidade: true,
-          precoUnitario: true,
+
+          produtoId:
+            true,
+
+          nomeProduto:
+            true,
+
+          quantidade:
+            true,
+
+          precoUnitario:
+            true,
+
+
+          /**
+           * Usado pelo PedidoDetalhado.jsx
+           * para exibir imagem e link.
+           */
+
+          produto: {
+            select: {
+              slug: true,
+
+              imagens: {
+                orderBy: {
+                  posicao:
+                    "asc",
+                },
+
+                take:
+                  1,
+
+                select: {
+                  url:
+                    true,
+
+                  textoAlternativo:
+                    true,
+                },
+              },
+            },
+          },
+        },
+      },
+
+
+      /**
+       * Necessário para mostrar o método
+       * e status do pagamento.
+       */
+
+      pagamentos: {
+        orderBy: {
+          criadoEm:
+            "desc",
+        },
+
+        select: {
+          id: true,
+
+          metodo: true,
+
+          status: true,
+
+          valor: true,
+
+          criadoEm: true,
         },
       },
     },
   });
 }
 
-// Lista todos os pedidos para o painel administrativo.
+
+/**
+ * =========================================
+ * BUSCAR PEDIDO POR ID
+ * =========================================
+ *
+ * Uso interno/administrativo.
+ *
+ * Diferente de buscarPedidoDoUsuario(),
+ * esta função não recebe usuarioId.
+ *
+ * Ela é utilizada pelo service para descobrir
+ * o status verdadeiro que está no banco antes
+ * de permitir uma transição administrativa.
+ */
+
+export async function buscarPedidoPorId(
+  pedidoId
+) {
+  return prisma.pedido.findUnique({
+    where: {
+      id:
+        pedidoId,
+    },
+
+
+    select: {
+      id: true,
+
+      status: true,
+
+      valorTotal: true,
+
+      criadoEm: true,
+
+      atualizadoEm: true,
+    },
+  });
+}
+
+
+/**
+ * =========================================
+ * LISTAR TODOS OS PEDIDOS
+ * PAINEL ADMINISTRATIVO
+ * =========================================
+ */
+
 export async function listarTodosPedidos() {
   return prisma.pedido.findMany({
     orderBy: {
-      criadoEm: "desc",
+      criadoEm:
+        "desc",
     },
+
+
     include: {
+      /**
+       * Cliente
+       */
+
       usuario: {
         select: {
-          nome: true,
-          email: true,
+          nome:
+            true,
+
+          email:
+            true,
         },
       },
+
+
+      /**
+       * Produtos
+       */
+
       itens: {
         select: {
-          id: true,
-          produtoId: true,
-          nomeProduto: true,
-          quantidade: true,
-          precoUnitario: true,
+          id:
+            true,
+
+          produtoId:
+            true,
+
+          nomeProduto:
+            true,
+
+          quantidade:
+            true,
+
+          precoUnitario:
+            true,
+        },
+      },
+
+
+      /**
+       * Pagamentos
+       *
+       * Utilizado pelo modal do AdminPedidos.
+       */
+
+      pagamentos: {
+        orderBy: {
+          criadoEm:
+            "desc",
+        },
+
+        select: {
+          id:
+            true,
+
+          metodo:
+            true,
+
+          status:
+            true,
+
+          valor:
+            true,
+
+          criadoEm:
+            true,
         },
       },
     },
   });
 }
 
-// Atualiza o status de um pedido.
-export async function atualizarStatusPedido(pedidoId, novoStatus) {
-  return prisma.$transaction(async (tx) => {
-    const pedido = await tx.pedido.findUnique({
-      where: {
-        id: pedidoId,
-      },
-      include: {
-        itens: true,
-      },
-    });
 
-    if (!pedido) {
-      const error = new Error("Pedido não encontrado.");
-      error.status = 404;
-      throw error;
+/**
+ * =========================================
+ * ATUALIZAR STATUS DO PEDIDO
+ * =========================================
+ *
+ * A validação das transições:
+ *
+ * PAGO
+ *   ↓
+ * EM_PREPARACAO
+ *   ↓
+ * ENVIADO
+ *   ↓
+ * ENTREGUE
+ *
+ * é feita no pedidoService.
+ *
+ *
+ * Este model ainda possui proteções próprias
+ * para concorrência e cancelamento.
+ */
+
+export async function atualizarStatusPedido(
+  pedidoId,
+  novoStatus
+) {
+  return prisma.$transaction(
+    async (tx) => {
+      /**
+       * -------------------------------------
+       * 1. BUSCAR PEDIDO
+       * -------------------------------------
+       */
+
+      const pedido =
+        await tx.pedido.findUnique({
+          where: {
+            id:
+              pedidoId,
+          },
+
+          include: {
+            itens:
+              true,
+          },
+        });
+
+
+      if (!pedido) {
+        const error =
+          new Error(
+            "Pedido não encontrado."
+          );
+
+        error.status =
+          404;
+
+        throw error;
+      }
+
+
+      /**
+       * -------------------------------------
+       * 2. MESMO STATUS
+       * -------------------------------------
+       */
+
+      if (
+        pedido.status ===
+        novoStatus
+      ) {
+        return pedido;
+      }
+
+
+      /**
+       * -------------------------------------
+       * 3. PEDIDO CANCELADO
+       * -------------------------------------
+       */
+
+      if (
+        pedido.status ===
+        "CANCELADO"
+      ) {
+        const error =
+          new Error(
+            "Não é possível alterar o status de um pedido cancelado."
+          );
+
+        error.status =
+          400;
+
+        throw error;
+      }
+
+
+      /**
+       * -------------------------------------
+       * 4. CANCELAMENTO
+       * -------------------------------------
+       *
+       * Esta lógica será útil quando
+       * implementarmos cancelamento.
+       *
+       * Ao cancelar, devolvemos o estoque
+       * reservado.
+       */
+
+      if (
+        novoStatus ===
+        "CANCELADO"
+      ) {
+        for (
+          const item of
+          pedido.itens
+        ) {
+          await tx.produto.update({
+            where: {
+              id:
+                item.produtoId,
+            },
+
+            data: {
+              estoque: {
+                increment:
+                  item.quantidade,
+              },
+            },
+          });
+        }
+      }
+
+
+      /**
+       * -------------------------------------
+       * 5. ATUALIZAÇÃO CONDICIONAL
+       * -------------------------------------
+       *
+       * Além das regras do service, fazemos
+       * uma proteção contra concorrência.
+       *
+       * Exemplo:
+       *
+       * requisição A lê: PAGO
+       * requisição B lê: PAGO
+       *
+       * A atualiza:
+       * PAGO -> EM_PREPARACAO
+       *
+       * Quando B tentar atualizar usando
+       * status = PAGO, count será 0.
+       */
+
+      const resultado =
+        await tx.pedido.updateMany({
+          where: {
+            id:
+              pedidoId,
+
+            status:
+              pedido.status,
+          },
+
+          data: {
+            status:
+              novoStatus,
+          },
+        });
+
+
+      if (
+        resultado.count !== 1
+      ) {
+        const error =
+          new Error(
+            "O pedido foi atualizado por outra operação. Atualize a página e tente novamente."
+          );
+
+        error.status =
+          409;
+
+        throw error;
+      }
+
+
+      /**
+       * -------------------------------------
+       * 6. RETORNAR PEDIDO ATUALIZADO
+       * -------------------------------------
+       *
+       * Retornamos as mesmas informações
+       * utilizadas pelo painel administrativo.
+       */
+
+      return tx.pedido.findUnique({
+        where: {
+          id:
+            pedidoId,
+        },
+
+
+        include: {
+          usuario: {
+            select: {
+              nome:
+                true,
+
+              email:
+                true,
+            },
+          },
+
+
+          itens: {
+            select: {
+              id:
+                true,
+
+              produtoId:
+                true,
+
+              nomeProduto:
+                true,
+
+              quantidade:
+                true,
+
+              precoUnitario:
+                true,
+            },
+          },
+
+
+          pagamentos: {
+            orderBy: {
+              criadoEm:
+                "desc",
+            },
+
+            select: {
+              id:
+                true,
+
+              metodo:
+                true,
+
+              status:
+                true,
+
+              valor:
+                true,
+
+              criadoEm:
+                true,
+            },
+          },
+        },
+      });
     }
+  );
+}
 
-    if (pedido.status === novoStatus) {
-      return pedido;
-    }
+/**
+ * =========================================
+ * EXPIRAR PEDIDO PENDENTE
+ * =========================================
+ *
+ * Cancela um pedido somente se:
+ *
+ * - ainda estiver PENDENTE;
+ * - possuir prazo de expiração;
+ * - o prazo já tiver terminado.
+ *
+ * Se o pagamento tiver sido aprovado antes
+ * desta operação, o status já será PAGO e
+ * nenhuma alteração será realizada.
+ */
 
-    // Não permitimos reativar pedidos cancelados nesta etapa.
-    if (pedido.status === "CANCELADO") {
-      const error = new Error(
-        "Não é possível alterar o status de um pedido cancelado."
-      );
-      error.status = 400;
-      throw error;
-    }
+export async function expirarPedidoPendente(
+  pedidoId
+) {
+  return prisma.$transaction(
+    async (tx) => {
+      const agora =
+        new Date();
 
-    // Se o pedido for cancelado, devolvemos o estoque reservado.
-    if (novoStatus === "CANCELADO") {
-      for (const item of pedido.itens) {
+
+      /**
+       * Primeiro tentamos assumir o direito
+       * de cancelar o pedido.
+       *
+       * A alteração só acontece se o pedido
+       * AINDA estiver PENDENTE e vencido.
+       */
+
+      const resultado =
+        await tx.pedido.updateMany({
+          where: {
+            id:
+              pedidoId,
+
+            status:
+              "PENDENTE",
+
+            expiraEm: {
+              not:
+                null,
+
+              lte:
+                agora,
+            },
+          },
+
+          data: {
+            status:
+              "CANCELADO",
+          },
+        });
+
+
+      /**
+       * count === 0 significa que:
+       *
+       * - o pedido já foi pago;
+       * - já foi cancelado;
+       * - ainda não venceu;
+       * - ou não existe.
+       *
+       * Em qualquer desses casos não
+       * devolvemos estoque.
+       */
+
+      if (
+        resultado.count !== 1
+      ) {
+        return null;
+      }
+
+
+      /**
+       * Como conseguimos alterar
+       * PENDENTE -> CANCELADO,
+       * agora podemos devolver o estoque.
+       */
+
+      const pedido =
+        await tx.pedido.findUnique({
+          where: {
+            id:
+              pedidoId,
+          },
+
+          include: {
+            itens:
+              true,
+          },
+        });
+
+
+      if (!pedido) {
+        throw new Error(
+          "Pedido não encontrado após a expiração."
+        );
+      }
+
+
+      for (
+        const item of pedido.itens
+      ) {
         await tx.produto.update({
           where: {
-            id: item.produtoId,
+            id:
+              item.produtoId,
           },
+
           data: {
             estoque: {
-              increment: item.quantidade,
+              increment:
+                item.quantidade,
             },
           },
         });
       }
+
+
+      return pedido;
     }
+  );
+}
 
-    const resultado = await tx.pedido.updateMany({
-      where: {
-        id: pedidoId,
-        status: pedido.status,
-      },
-      data: {
-        status: novoStatus,
-      },
-    });
 
-    if (resultado.count !== 1) {
-      const error = new Error(
-        "O pedido foi atualizado por outra operação. Atualize a página."
-      );
-      error.status = 409;
-      throw error;
-    }
+/**
+ * =========================================
+ * BUSCAR PEDIDOS PENDENTES VENCIDOS
+ * =========================================
+ */
 
-    return tx.pedido.findUnique({
-      where: {
-        id: pedidoId,
+export async function buscarPedidosPendentesVencidos() {
+  return prisma.pedido.findMany({
+    where: {
+      status:
+        "PENDENTE",
+
+      expiraEm: {
+        not:
+          null,
+
+        lte:
+          new Date(),
       },
-      include: {
-        itens: true,
-      },
-    });
+    },
+
+    select: {
+      id:
+        true,
+
+      expiraEm:
+        true,
+    },
   });
 }

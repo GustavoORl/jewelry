@@ -455,7 +455,7 @@ export default function Header() {
                                             <nav className="py-1">
                                                 {[
                                                     {
-                                                        to: "/minha-conta",
+                                                        to: "/perfil",
                                                         texto: "Minha conta",
                                                         Icone: User,
                                                     },
@@ -470,7 +470,7 @@ export default function Header() {
                                                         Icone: Heart,
                                                     },
                                                     {
-                                                        to: "/meus-enderecos",
+                                                        to: "/enderecos",
                                                         texto: "Meus endereços",
                                                         Icone: MapPin,
                                                     },

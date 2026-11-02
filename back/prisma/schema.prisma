@@ -42,6 +42,7 @@ model Endereco {
   usuario      Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
 
   @@index([usuarioId])
+  @@index([usuarioId, principal])
 }
 
 model Categoria {
@@ -145,7 +146,9 @@ model Pedido {
   id                 String       @id @default(cuid())
   usuarioId          String
   status             StatusPedido @default(PENDENTE)
+
   valorTotal         Decimal      @db.Decimal(10, 2)
+
   destinatario       String
   cepEntrega         String
   ruaEntrega         String
@@ -154,8 +157,12 @@ model Pedido {
   bairroEntrega      String
   cidadeEntrega      String
   estadoEntrega      String
+
+  expiraEm           DateTime?
+
   criadoEm           DateTime     @default(now())
   atualizadoEm       DateTime     @updatedAt
+
   itens              ItemPedido[]
   pagamentos         Pagamento[]
   usuario            Usuario      @relation(fields: [usuarioId], references: [id])
@@ -163,6 +170,7 @@ model Pedido {
   @@index([usuarioId])
   @@index([status])
   @@index([criadoEm])
+  @@index([expiraEm])
 }
 
 model ItemPedido {
@@ -203,24 +211,28 @@ model Favorito {
 }
 
 model Pagamento {
-  id                  String            @id @default(cuid())
-  pedidoId            String
-  provedor            ProvedorPagamento @default(MERCADO_PAGO)
-  metodo              MetodoPagamento
-  status              StatusPagamento   @default(PENDENTE)
-  valor               Decimal           @db.Decimal(10, 2)
-  provedorPagamentoId String?           @unique
-  provedorOrdemId     String?
-  referenciaExterna   String            @unique
-  chaveIdempotencia   String            @unique
-  detalhes            Json?
-  criadoEm            DateTime          @default(now())
-  atualizadoEm        DateTime          @updatedAt
-  pedido              Pedido            @relation(fields: [pedidoId], references: [id])
+  id       String            @id @default(cuid())
+  pedidoId String
+  provedor ProvedorPagamento @default(MERCADO_PAGO)
+  metodo   MetodoPagamento
+  status   StatusPagamento   @default(PENDENTE)
+  valor    Decimal           @db.Decimal(10, 2)
+
+  provedorPagamentoId String? @unique
+  provedorOrdemId     String? @unique
+
+  referenciaExterna String @unique
+  chaveIdempotencia String @unique
+
+  detalhes Json?
+
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  pedido Pedido @relation(fields: [pedidoId], references: [id])
 
   @@index([pedidoId])
   @@index([status])
-  @@index([provedorOrdemId])
 }
 
 enum TipoUsuario {

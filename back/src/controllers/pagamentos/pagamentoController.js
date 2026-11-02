@@ -1,12 +1,10 @@
 import {
   iniciarPagamentoPix,
   iniciarPagamentoCartao,
-  iniciarPagamentoDebito,
   reconciliarPagamento,
   buscarUltimoPagamentoPedido,
   diagnosticarMercadoPago,
 } from "../../services/pagamentoService.js";
-
 
 /**
  * =========================================
@@ -20,13 +18,17 @@ const ERROS_PEDIDO = [
   "Este pedido já possui uma tentativa de pagamento em andamento.",
 ];
 
-
 const ERROS_CARTAO = [
   "Token do cartão não informado.",
   "Método do cartão não informado.",
   "Quantidade de parcelas inválida.",
 ];
 
+/**
+ * =========================================
+ * RESPONDER ERRO DE PEDIDO
+ * =========================================
+ */
 
 function responderErroPedido(
   res,
@@ -36,17 +38,11 @@ function responderErroPedido(
     erro.message ===
     "Pedido não encontrado."
   ) {
-    return res
-      .status(404)
-      .json({
-        sucesso:
-          false,
-
-        mensagem:
-          erro.message,
-      });
+    return res.status(404).json({
+      sucesso: false,
+      mensagem: erro.message,
+    });
   }
-
 
   if (
     erro.message ===
@@ -54,26 +50,49 @@ function responderErroPedido(
     erro.message ===
       "Este pedido já possui uma tentativa de pagamento em andamento."
   ) {
-    return res
-      .status(409)
-      .json({
-        sucesso:
-          false,
-
-        mensagem:
-          erro.message,
-      });
+    return res.status(409).json({
+      sucesso: false,
+      mensagem: erro.message,
+    });
   }
-
 
   return null;
 }
 
+/**
+ * =========================================
+ * RESPONDER ERRO DE CARTÃO
+ * =========================================
+ */
+
+function responderErroCartao(
+  res,
+  erro
+) {
+  if (
+    ERROS_CARTAO.includes(
+      erro.message
+    )
+  ) {
+    return res.status(400).json({
+      sucesso: false,
+      mensagem: erro.message,
+    });
+  }
+
+  return null;
+}
 
 /**
  * =========================================
  * PIX
  * =========================================
+ *
+ * O service utiliza:
+ *
+ * POST /v1/orders
+ *
+ * processing_mode = automatic
  */
 
 export async function criarPagamentoPix(
@@ -85,27 +104,33 @@ export async function criarPagamentoPix(
       pedidoId,
     } = req.body;
 
-
     const usuarioId =
       req.usuario.id;
 
+    /**
+     * =====================================
+     * PEDIDO
+     * =====================================
+     */
 
     if (
       !pedidoId ||
       typeof pedidoId !==
         "string"
     ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
+      return res.status(400).json({
+        sucesso: false,
 
-          mensagem:
-            "Informe um ID de pedido válido.",
-        });
+        mensagem:
+          "Informe um ID de pedido válido.",
+      });
     }
 
+    /**
+     * =====================================
+     * ORDERS API - PIX
+     * =====================================
+     */
 
     const pagamento =
       await iniciarPagamentoPix(
@@ -113,26 +138,25 @@ export async function criarPagamentoPix(
         usuarioId
       );
 
+    return res.status(201).json({
+      sucesso: true,
 
-    return res
-      .status(201)
-      .json({
-        sucesso:
-          true,
+      mensagem:
+        "Cobrança Pix criada com sucesso.",
 
-        mensagem:
-          "Cobrança Pix criada com sucesso.",
-
-        pagamento,
-      });
-  } catch (
-    erro
-  ) {
+      pagamento,
+    });
+  } catch (erro) {
     console.error(
       "Erro ao criar pagamento Pix:",
       erro
     );
 
+    /**
+     * =====================================
+     * ERROS DO PEDIDO
+     * =====================================
+     */
 
     if (
       ERROS_PEDIDO.includes(
@@ -145,30 +169,45 @@ export async function criarPagamentoPix(
       );
     }
 
+    /**
+     * =====================================
+     * ERRO ORDERS API
+     * =====================================
+     */
 
     return res
       .status(
-        erro.status || 502
+        erro.status ||
+        502
       )
       .json({
-        sucesso:
-          false,
+        sucesso: false,
 
         mensagem:
-          "Não foi possível confirmar a criação da cobrança. Verifique o status antes de tentar novamente.",
+          erro.message ||
+          "Não foi possível criar a cobrança Pix.",
 
         statusMercadoPago:
           erro.status ||
+          null,
+
+        detalhes:
+          erro.detalhes ||
           null,
       });
   }
 }
 
-
 /**
  * =========================================
- * CRÉDITO
+ * CARTÃO DE CRÉDITO
  * =========================================
+ *
+ * O service utiliza:
+ *
+ * POST /v1/orders
+ *
+ * processing_mode = automatic
  */
 
 export async function criarPagamentoCartao(
@@ -184,13 +223,13 @@ export async function criarPagamentoCartao(
       payer,
     } = req.body;
 
-
     const usuarioId =
       req.usuario.id;
 
-
     /**
-     * Pedido
+     * =====================================
+     * PEDIDO
+     * =====================================
      */
 
     if (
@@ -198,20 +237,18 @@ export async function criarPagamentoCartao(
       typeof pedidoId !==
         "string"
     ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
+      return res.status(400).json({
+        sucesso: false,
 
-          mensagem:
-            "Informe um ID de pedido válido.",
-        });
+        mensagem:
+          "Informe um ID de pedido válido.",
+      });
     }
 
-
     /**
-     * Token
+     * =====================================
+     * TOKEN
+     * =====================================
      */
 
     if (
@@ -219,20 +256,26 @@ export async function criarPagamentoCartao(
       typeof token !==
         "string"
     ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
+      return res.status(400).json({
+        sucesso: false,
 
-          mensagem:
-            "Token do cartão não informado.",
-        });
+        mensagem:
+          "Token do cartão não informado.",
+      });
     }
 
-
     /**
-     * Método
+     * =====================================
+     * PAYMENT METHOD
+     * =====================================
+     *
+     * Identificado pelo MercadoPago.js:
+     *
+     * visa
+     * master
+     * elo
+     * amex
+     * etc.
      */
 
     if (
@@ -240,20 +283,18 @@ export async function criarPagamentoCartao(
       typeof paymentMethodId !==
         "string"
     ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
+      return res.status(400).json({
+        sucesso: false,
 
-          mensagem:
-            "Método do cartão não informado.",
-        });
+        mensagem:
+          "Método do cartão não informado.",
+      });
     }
 
-
     /**
-     * Parcelas
+     * =====================================
+     * PARCELAS
+     * =====================================
      */
 
     const numeroParcelas =
@@ -261,27 +302,24 @@ export async function criarPagamentoCartao(
         installments
       );
 
-
     if (
       !Number.isInteger(
         numeroParcelas
       ) ||
       numeroParcelas < 1
     ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
+      return res.status(400).json({
+        sucesso: false,
 
-          mensagem:
-            "Quantidade de parcelas inválida.",
-        });
+        mensagem:
+          "Quantidade de parcelas inválida.",
+      });
     }
 
-
     /**
-     * Service
+     * =====================================
+     * ORDERS API
+     * =====================================
      */
 
     const pagamento =
@@ -302,29 +340,24 @@ export async function criarPagamentoCartao(
         usuarioId
       );
 
+    return res.status(201).json({
+      sucesso: true,
 
-    return res
-      .status(201)
-      .json({
-        sucesso:
-          true,
+      mensagem:
+        "Pagamento com cartão de crédito processado.",
 
-        mensagem:
-          "Pagamento com cartão de crédito processado.",
-
-        pagamento,
-      });
-  } catch (
-    erro
-  ) {
+      pagamento,
+    });
+  } catch (erro) {
     console.error(
       "Erro ao criar pagamento com cartão de crédito:",
       erro
     );
 
-
     /**
-     * Pedido
+     * =====================================
+     * PEDIDO
+     * =====================================
      */
 
     if (
@@ -338,9 +371,10 @@ export async function criarPagamentoCartao(
       );
     }
 
-
     /**
-     * Validação do cartão
+     * =====================================
+     * VALIDAÇÃO DO CARTÃO
+     * =====================================
      */
 
     if (
@@ -348,29 +382,25 @@ export async function criarPagamentoCartao(
         erro.message
       )
     ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
-
-          mensagem:
-            erro.message,
-        });
+      return responderErroCartao(
+        res,
+        erro
+      );
     }
 
-
     /**
-     * Mercado Pago
+     * =====================================
+     * MERCADO PAGO / ORDERS API
+     * =====================================
      */
 
     return res
       .status(
-        erro.status || 502
+        erro.status ||
+        502
       )
       .json({
-        sucesso:
-          false,
+        sucesso: false,
 
         mensagem:
           erro.message ||
@@ -379,212 +409,27 @@ export async function criarPagamentoCartao(
         statusMercadoPago:
           erro.status ||
           null,
-      });
-  }
-}
 
-
-/**
- * =========================================
- * DÉBITO
- * =========================================
- */
-
-export async function criarPagamentoDebito(
-  req,
-  res
-) {
-  try {
-    const {
-      pedidoId,
-      token,
-      paymentMethodId,
-      payer,
-    } = req.body;
-
-
-    const usuarioId =
-      req.usuario.id;
-
-
-    /**
-     * Pedido
-     */
-
-    if (
-      !pedidoId ||
-      typeof pedidoId !==
-        "string"
-    ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
-
-          mensagem:
-            "Informe um ID de pedido válido.",
-        });
-    }
-
-
-    /**
-     * Token
-     */
-
-    if (
-      !token ||
-      typeof token !==
-        "string"
-    ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
-
-          mensagem:
-            "Token do cartão não informado.",
-        });
-    }
-
-
-    /**
-     * Método
-     */
-
-    if (
-      !paymentMethodId ||
-      typeof paymentMethodId !==
-        "string"
-    ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
-
-          mensagem:
-            "Método do cartão não informado.",
-        });
-    }
-
-
-    /**
-     * Service
-     *
-     * Agora o débito também utiliza:
-     *
-     * POST /v1/orders
-     *
-     * e não mais:
-     *
-     * POST /v1/payments
-     */
-
-    const pagamento =
-      await iniciarPagamentoDebito(
-        {
-          pedidoId,
-
-          token,
-
-          paymentMethodId,
-
-          payer,
-        },
-
-        usuarioId
-      );
-
-
-    return res
-      .status(201)
-      .json({
-        sucesso:
-          true,
-
-        mensagem:
-          "Pagamento com cartão de débito processado.",
-
-        pagamento,
-      });
-  } catch (
-    erro
-  ) {
-    console.error(
-      "Erro ao criar pagamento com cartão de débito:",
-      erro
-    );
-
-
-    /**
-     * Pedido
-     */
-
-    if (
-      ERROS_PEDIDO.includes(
-        erro.message
-      )
-    ) {
-      return responderErroPedido(
-        res,
-        erro
-      );
-    }
-
-
-    /**
-     * Validação do cartão
-     */
-
-    if (
-      ERROS_CARTAO.includes(
-        erro.message
-      )
-    ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
-
-          mensagem:
-            erro.message,
-        });
-    }
-
-
-    /**
-     * Mercado Pago / Orders
-     */
-
-    return res
-      .status(
-        erro.status || 502
-      )
-      .json({
-        sucesso:
-          false,
-
-        mensagem:
-          erro.message ||
-          "Não foi possível processar o pagamento com cartão de débito.",
-
-        statusMercadoPago:
-          erro.status ||
+        detalhes:
+          erro.detalhes ||
           null,
       });
   }
 }
 
-
 /**
  * =========================================
- * CONSULTAR PAGAMENTO
+ * CONSULTAR / RECONCILIAR PAGAMENTO
  * =========================================
  *
- * O service consulta agora:
+ * O parâmetro recebido pela rota continua
+ * sendo o ID LOCAL da tabela Pagamento.
+ *
+ * O service encontra:
+ *
+ * pagamento.provedorOrdemId
+ *
+ * e consulta:
  *
  * GET /v1/orders/{orderId}
  */
@@ -598,27 +443,28 @@ export async function consultarPagamento(
       id,
     } = req.params;
 
-
     const usuarioId =
       req.usuario.id;
-
 
     if (
       !id ||
       typeof id !==
         "string"
     ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
+      return res.status(400).json({
+        sucesso: false,
 
-          mensagem:
-            "Informe um ID de pagamento válido.",
-        });
+        mensagem:
+          "Informe um ID de pagamento válido.",
+      });
     }
 
+    /**
+     * O ID recebido é o nosso
+     * Pagamento.id.
+     *
+     * O service resolve o Order ID.
+     */
 
     const resultado =
       await reconciliarPagamento(
@@ -626,83 +472,93 @@ export async function consultarPagamento(
         usuarioId
       );
 
+    return res.status(200).json({
+      sucesso: true,
 
-    return res
-      .status(200)
-      .json({
-        sucesso:
-          true,
+      mensagem:
+        "Pagamento consultado com sucesso.",
 
-        mensagem:
-          "Pagamento consultado com sucesso.",
-
-        pagamento:
-          resultado,
-      });
-  } catch (
-    erro
-  ) {
+      pagamento:
+        resultado,
+    });
+  } catch (erro) {
     console.error(
       "Erro ao consultar pagamento:",
       erro
     );
 
+    /**
+     * =====================================
+     * PAGAMENTO LOCAL NÃO EXISTE
+     * =====================================
+     */
 
     if (
       erro.message ===
       "Pagamento não encontrado."
     ) {
-      return res
-        .status(404)
-        .json({
-          sucesso:
-            false,
-
-          mensagem:
-            erro.message,
-        });
+      return res.status(404).json({
+        sucesso: false,
+        mensagem: erro.message,
+      });
     }
 
+    /**
+     * =====================================
+     * ORDER AINDA NÃO ASSOCIADA
+     * =====================================
+     */
 
     if (
       erro.message ===
       "O pagamento ainda não possui uma Order no Mercado Pago."
     ) {
-      return res
-        .status(409)
-        .json({
-          sucesso:
-            false,
-
-          mensagem:
-            erro.message,
-        });
+      return res.status(409).json({
+        sucesso: false,
+        mensagem: erro.message,
+      });
     }
 
+    /**
+     * =====================================
+     * ERRO CONSULTANDO MERCADO PAGO
+     * =====================================
+     */
 
     return res
       .status(
-        erro.status || 502
+        erro.status ||
+        502
       )
       .json({
-        sucesso:
-          false,
+        sucesso: false,
 
         mensagem:
+          erro.message ||
           "Não foi possível consultar o pagamento.",
 
         statusMercadoPago:
           erro.status ||
           null,
+
+        detalhes:
+          erro.detalhes ||
+          null,
       });
   }
 }
-
 
 /**
  * =========================================
  * RECUPERAR ÚLTIMO PAGAMENTO DO PEDIDO
  * =========================================
+ *
+ * Utilizado principalmente quando:
+ *
+ * - frontend recarrega;
+ * - usuário retorna à tela;
+ * - precisamos recuperar QR Code Pix;
+ * - precisamos recuperar status atual.
  */
 
 export async function recuperarPagamentoPedido(
@@ -714,27 +570,21 @@ export async function recuperarPagamentoPedido(
       pedidoId,
     } = req.params;
 
-
     const usuarioId =
       req.usuario.id;
-
 
     if (
       !pedidoId ||
       typeof pedidoId !==
         "string"
     ) {
-      return res
-        .status(400)
-        .json({
-          sucesso:
-            false,
+      return res.status(400).json({
+        sucesso: false,
 
-          mensagem:
-            "Informe um ID de pedido válido.",
-        });
+        mensagem:
+          "Informe um ID de pedido válido.",
+      });
     }
-
 
     const pagamento =
       await buscarUltimoPagamentoPedido(
@@ -742,48 +592,41 @@ export async function recuperarPagamentoPedido(
         usuarioId
       );
 
+    return res.status(200).json({
+      sucesso: true,
 
-    return res
-      .status(200)
-      .json({
-        sucesso:
-          true,
-
-        pagamento,
-      });
-  } catch (
-    erro
-  ) {
+      pagamento,
+    });
+  } catch (erro) {
     console.error(
       "Erro ao recuperar pagamento:",
       erro
     );
 
+    return res.status(500).json({
+      sucesso: false,
 
-    return res
-      .status(500)
-      .json({
-        sucesso:
-          false,
-
-        mensagem:
-          "Não foi possível recuperar o pagamento.",
-      });
+      mensagem:
+        "Não foi possível recuperar o pagamento.",
+    });
   }
 }
-
 
 /**
  * =========================================
  * DIAGNÓSTICO MERCADO PAGO
  * =========================================
  *
- * Agora utiliza:
+ * Utiliza:
  *
  * MERCADO_PAGO_ACCESS_TOKEN
  *
- * da mesma aplicação responsável
- * pelas Orders.
+ * da aplicação responsável por:
+ *
+ * - PIX
+ * - cartão de crédito
+ *
+ * via Orders API.
  */
 
 export async function diagnosticarIntegracaoMercadoPago(
@@ -794,31 +637,24 @@ export async function diagnosticarIntegracaoMercadoPago(
     const diagnostico =
       await diagnosticarMercadoPago();
 
+    return res.status(200).json({
+      sucesso: true,
 
-    return res
-      .status(200)
-      .json({
-        sucesso:
-          true,
-
-        diagnostico,
-      });
-  } catch (
-    erro
-  ) {
+      diagnostico,
+    });
+  } catch (erro) {
     console.error(
       "Erro no diagnóstico do Mercado Pago:",
       erro
     );
 
-
     return res
       .status(
-        erro.status || 500
+        erro.status ||
+        500
       )
       .json({
-        sucesso:
-          false,
+        sucesso: false,
 
         mensagem:
           erro.message ||

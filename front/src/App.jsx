@@ -16,6 +16,11 @@ import PedidoUser from "./pages/user/PedidoUser.jsx";
 import PedidoDetalhado from "./pages/user/PedidoDetalhado.jsx";
 import FavoritoUser from "./pages/user/FavoritoUser.jsx";
 import Pagamento from "./pages/user/Pagamento.jsx";
+import PedidoConfirmado from "./pages/user/PedidoConfirmado.jsx";
+import EnderecoUser from "./pages/user/EnderecoUser.jsx";
+import HistoricoCompras from "./pages/user/HistoricoCompras.jsx";
+import Configuracoes from "./pages/user/Configuracoes.jsx";
+import PerfilUser from "./pages/user/PerfilUser.jsx";
 
 import RotaProtegida from "./components/RotaProtegida.jsx";
 
@@ -47,73 +52,78 @@ function ControleCapaInicial() {
 export default function App() {
   return (
     <BrowserRouter>
-      <ControleCapaInicial/>
-        <AuthProvider>
+      <ControleCapaInicial />
+      <AuthProvider>
 
-          <Routes>
-            {/* Loja pública */}
-            <Route element={<Layout />}>
-              <Route path="/" element={<Home />} />
+        <Routes>
+          {/* Loja pública */}
+          <Route element={<Layout />}>
+            <Route path="/" element={<Home />} />
 
-              <Route
-                path="/produtos"
-                element={<ListagemProdutos />}
-              />
-
-              <Route
-                path="/produtos/:id"
-                element={<ProdutoDetalhado />}
-              />
-
-              <Route path="/sacola" element={<SacolaUser />} />
-              <Route path="/checkout" element={<Checkout />} />
-              <Route path="/pedidos" element={<PedidoUser />} />
-              <Route path="/pedidos/:pedidoId" element={<PedidoDetalhado />} />
-              <Route path="/favoritos" element={<FavoritoUser />} />
-              <Route path="/pagamento/:pedidoId" element={<Pagamento />}/>
-            </Route>
-
-            {/* Login */}
-            <Route path="/login" element={<Login />} />
-
-            {/* Área administrativa protegida */}
             <Route
-              element={
-                <RotaProtegida tiposPermitidos={["ADMIN"]} />
-              }
-            >
-              <Route path="/admin">
-                <Route index element={<AdminDashboard />} />
+              path="/produtos"
+              element={<ListagemProdutos />}
+            />
 
-                <Route
-                  path="produtos"
-                  element={<AdminProdutos />}
-                />
+            <Route
+              path="/produtos/:id"
+              element={<ProdutoDetalhado />}
+            />
 
-                <Route
-                  path="pedidos"
-                  element={<AdminPedidos />}
-                />
+            <Route path="/sacola" element={<SacolaUser />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/pedidos" element={<PedidoUser />} />
+            <Route path="/pedidos/:pedidoId" element={<PedidoDetalhado />} />
+            <Route path="/favoritos" element={<FavoritoUser />} />
+            <Route path="/pagamento/:pedidoId" element={<Pagamento />} />
+            <Route path="/pedidos/:pedidoId/confirmado" element={<PedidoConfirmado />}/>
+            <Route path="/enderecos" element={<EnderecoUser />}/>
+            <Route path="/historico-compras" element={<HistoricoCompras />}/>
+            <Route path="/configuracoes" element={<Configuracoes />}/>
+            <Route path="/perfil" element={<PerfilUser />}/>
+          </Route>
 
-                <Route
-                  path="clientes"
-                  element={<AdminClientes />}
-                />
+          {/* Login */}
+          <Route path="/login" element={<Login />} />
 
-                <Route
-                  path="categorias"
-                  element={<AdminCategorias />}
-                />
+          {/* Área administrativa protegida */}
+          <Route
+            element={
+              <RotaProtegida tiposPermitidos={["ADMIN"]} />
+            }
+          >
+            <Route path="/admin">
+              <Route index element={<AdminDashboard />} />
 
-                <Route
-                  path="materiais"
-                  element={<AdminMateriais />}
-                />
-              </Route>
+              <Route
+                path="produtos"
+                element={<AdminProdutos />}
+              />
+
+              <Route
+                path="pedidos"
+                element={<AdminPedidos />}
+              />
+
+              <Route
+                path="clientes"
+                element={<AdminClientes />}
+              />
+
+              <Route
+                path="categorias"
+                element={<AdminCategorias />}
+              />
+
+              <Route
+                path="materiais"
+                element={<AdminMateriais />}
+              />
             </Route>
-          </Routes>
+          </Route>
+        </Routes>
 
-        </AuthProvider>
+      </AuthProvider>
     </BrowserRouter>
   );
 }

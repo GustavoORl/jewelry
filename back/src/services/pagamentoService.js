@@ -7,10 +7,8 @@ import {
   atualizarPagamento,
 } from "../models/pagamentoModel.js";
 
-
 const MERCADO_PAGO_API =
   "https://api.mercadopago.com";
-
 
 /**
  * =========================================
@@ -31,10 +29,9 @@ function obterAccessToken() {
   return accessToken;
 }
 
-
 /**
  * =========================================
- * UTILITÁRIOS DE RESPOSTA
+ * UTILITÁRIOS HTTP
  * =========================================
  */
 
@@ -55,7 +52,6 @@ async function lerRespostaJson(resposta) {
   }
 }
 
-
 function criarErroMercadoPago(
   resposta,
   resultado,
@@ -63,6 +59,7 @@ function criarErroMercadoPago(
 ) {
   const erro = new Error(
     resultado?.message ||
+    resultado?.error ||
     mensagemPadrao
   );
 
@@ -75,14 +72,65 @@ function criarErroMercadoPago(
   return erro;
 }
 
+/**
+ * =========================================
+ * SANITIZAÇÃO
+ * =========================================
+ */
+
+function sanitizarObjeto(valor) {
+  if (
+    valor == null ||
+    typeof valor !== "object"
+  ) {
+    return valor;
+  }
+
+  const copia =
+    structuredClone(valor);
+
+  function limpar(objeto) {
+    if (
+      objeto == null ||
+      typeof objeto !== "object"
+    ) {
+      return;
+    }
+
+    for (
+      const chave of Object.keys(objeto)
+    ) {
+      if (
+        [
+          "token",
+          "security_code",
+          "cvv",
+          "card_number",
+        ].includes(chave)
+      ) {
+        objeto[chave] =
+          "[REMOVIDO]";
+
+        continue;
+      }
+
+      limpar(objeto[chave]);
+    }
+  }
+
+  limpar(copia);
+
+  return copia;
+}
 
 /**
  * =========================================
  * CRIAR ORDER
  * =========================================
  *
- * Todas as novas transações do projeto
- * passam pela Orders API.
+ * PIX e crédito passam agora por:
+ *
+ * POST /v1/orders
  */
 
 async function criarOrderMercadoPago(
@@ -96,13 +144,17 @@ async function criarOrderMercadoPago(
     await fetch(
       `${MERCADO_PAGO_API}/v1/orders`,
       {
-        method: "POST",
+        method:
+          "POST",
 
         headers: {
           Authorization:
             `Bearer ${accessToken}`,
 
           "Content-Type":
+            "application/json",
+
+          Accept:
             "application/json",
 
           "X-Idempotency-Key":
@@ -120,177 +172,157 @@ async function criarOrderMercadoPago(
     );
 
 
-  if (!resposta.ok) {
-    /**
-     * Criamos uma cópia segura do payload
-     * apenas para diagnóstico.
-     *
-     * Nunca devemos exibir:
-     *
-     * - token do cartão
-     * - security_code
-     * - cvv
-     * - número completo do cartão
-     */
+  /**
+   * =========================================
+   * ORDER CRIADA, MAS TRANSAÇÃO FALHOU
+   * =========================================
+   *
+   * A Orders API pode responder HTTP 402
+   * quando a Order foi criada corretamente,
+   * mas uma das transações falhou.
+   *
+   * Exemplo:
+   *
+   * {
+   *   "errors": [
+   *     {
+   *       "code": "failed",
+   *       "details": [
+   *         "PAY...: insufficient_amount"
+   *       ]
+   *     }
+   *   ],
+   *
+   *   "data": {
+   *     "id": "ORD...",
+   *     "status": "failed",
+   *     ...
+   *   }
+   * }
+   *
+   * Nesse cenário NÃO devemos lançar
+   * exception.
+   *
+   * A Order existe e precisa ser persistida
+   * normalmente para que nosso sistema
+   * registre o pagamento como RECUSADO.
+   */
 
-    const payloadSeguro =
-      structuredClone(
-        dados
+  let order =
+    resultado;
+
+
+  if (
+    resposta.status === 402 &&
+    resultado?.data?.id
+  ) {
+    order =
+      resultado.data;
+
+    const transacaoFalha =
+      obterTransacaoPagamento(
+        order
       );
 
+    console.warn(
+      "ORDER CRIADA COM TRANSAÇÃO NÃO APROVADA:",
+      {
+        statusHttp:
+          resposta.status,
 
-    const pagamentos =
-      payloadSeguro
-        ?.transactions
-        ?.payments;
+        orderId:
+          order?.id,
 
+        orderStatus:
+          order?.status,
 
-    if (
-      Array.isArray(
-        pagamentos
-      )
-    ) {
-      for (
-        const pagamento
-        of pagamentos
-      ) {
-        /**
-         * Caso o token esteja dentro de:
-         *
-         * payment_method.token
-         */
+        orderStatusDetail:
+          order?.status_detail,
 
-        if (
-          pagamento
+        paymentId:
+          transacaoFalha?.id,
+
+        paymentStatus:
+          transacaoFalha?.status,
+
+        paymentStatusDetail:
+          transacaoFalha
+            ?.status_detail,
+
+        paymentMethodId:
+          transacaoFalha
             ?.payment_method
-            ?.token
-        ) {
-          pagamento.payment_method.token =
-            "[REMOVIDO]";
-        }
+            ?.id,
 
-
-        /**
-         * Segurança adicional caso algum
-         * campo sensível seja enviado
-         * futuramente.
-         */
-
-        if (
-          pagamento
+        paymentMethodType:
+          transacaoFalha
             ?.payment_method
-            ?.security_code
-        ) {
-          pagamento.payment_method.security_code =
-            "[REMOVIDO]";
-        }
+            ?.type,
 
-
-        if (
-          pagamento
-            ?.payment_method
-            ?.cvv
-        ) {
-          pagamento.payment_method.cvv =
-            "[REMOVIDO]";
-        }
-
-
-        if (
-          pagamento
-            ?.payment_method
-            ?.card_number
-        ) {
-          pagamento.payment_method.card_number =
-            "[REMOVIDO]";
-        }
-
-
-        if (
-          pagamento
-            ?.payment_method
-            ?.number
-        ) {
-          pagamento.payment_method.number =
-            "[REMOVIDO]";
-        }
-
-
-        /**
-         * Algumas APIs podem utilizar
-         * token diretamente na transação.
-         */
-
-        if (
-          pagamento?.token
-        ) {
-          pagamento.token =
-            "[REMOVIDO]";
-        }
-
-
-        if (
-          pagamento?.security_code
-        ) {
-          pagamento.security_code =
-            "[REMOVIDO]";
-        }
-
-
-        if (
-          pagamento?.cvv
-        ) {
-          pagamento.cvv =
-            "[REMOVIDO]";
-        }
+        erros:
+          resultado?.errors ||
+          [],
       }
-    }
+    );
+  }
 
+
+  /**
+   * =========================================
+   * ERRO REAL DA API
+   * =========================================
+   *
+   * Se não for:
+   *
+   * - uma resposta 2xx
+   *
+   * nem:
+   *
+   * - HTTP 402 contendo data.id
+   *
+   * então tratamos como erro real da
+   * integração.
+   */
+
+  else if (!resposta.ok) {
+    console.error(
+      "=========================================="
+    );
 
     console.error(
-  "=========================================="
-);
+      "ERRO ORDERS MERCADO PAGO:"
+    );
 
-console.error(
-  "ERRO COMPLETO ORDERS MERCADO PAGO:"
-);
+    console.dir(
+      {
+        statusHttp:
+          resposta.status,
 
-console.dir(
-  {
-    statusHttp:
-      resposta.status,
+        statusText:
+          resposta.statusText,
 
-    statusText:
-      resposta.statusText,
+        payloadEnviado:
+          sanitizarObjeto(
+            dados
+          ),
 
-    payloadEnviado:
-      payloadSeguro,
+        respostaMercadoPago:
+          sanitizarObjeto(
+            resultado
+          ),
+      },
+      {
+        depth:
+          null,
 
-    respostaMercadoPago:
-      resultado,
-  },
-  {
-    depth: null,
-    colors: true,
-  }
-);
+        colors:
+          true,
+      }
+    );
 
-console.error(
-  "=========================================="
-);
-
-console.error(
-  "ERROS MERCADO PAGO:"
-);
-
-console.dir(
-  resultado?.errors,
-  {
-    depth: null,
-    colors: true,
-  }
-);
-
+    console.error(
+      "=========================================="
+    );
 
     throw criarErroMercadoPago(
       resposta,
@@ -300,9 +332,89 @@ console.dir(
   }
 
 
-  return resultado;
-}
+  /**
+   * =========================================
+   * TRANSAÇÃO DA ORDER
+   * =========================================
+   */
 
+  const transacao =
+    obterTransacaoPagamento(
+      order
+    );
+
+
+  /**
+   * =========================================
+   * LOG SEGURO DA ORDER
+   * =========================================
+   */
+
+  console.log(
+    "RESPOSTA ORDER MERCADO PAGO:",
+    {
+      id:
+        order?.id,
+
+      status:
+        order?.status,
+
+      statusDetail:
+        order?.status_detail,
+
+      processingMode:
+        order?.processing_mode,
+
+      externalReference:
+        order?.external_reference,
+
+      totalAmount:
+        order?.total_amount,
+
+      paymentId:
+        transacao?.id,
+
+      paymentStatus:
+        transacao?.status,
+
+      paymentStatusDetail:
+        transacao?.status_detail,
+
+      paymentMethodId:
+        transacao
+          ?.payment_method
+          ?.id,
+
+      paymentMethodType:
+        transacao
+          ?.payment_method
+          ?.type,
+    }
+  );
+
+
+  /**
+   * =========================================
+   * RETORNO
+   * =========================================
+   *
+   * Sempre retornamos a Order diretamente.
+   *
+   * Resposta normal:
+   *
+   * resultado = Order
+   *
+   * Resposta HTTP 402:
+   *
+   * resultado.data = Order
+   *
+   * Assim o restante do service não precisa
+   * saber qual formato HTTP o Mercado Pago
+   * utilizou para devolver a Order.
+   */
+
+  return order;
+}
 
 /**
  * =========================================
@@ -313,14 +425,14 @@ console.dir(
 async function consultarOrderMercadoPago(
   orderId
 ) {
-  const accessToken =
-    obterAccessToken();
-
   if (!orderId) {
     throw new Error(
       "ID da Order do Mercado Pago não informado."
     );
   }
+
+  const accessToken =
+    obterAccessToken();
 
   const resposta =
     await fetch(
@@ -328,7 +440,8 @@ async function consultarOrderMercadoPago(
         orderId
       )}`,
       {
-        method: "GET",
+        method:
+          "GET",
 
         headers: {
           Authorization:
@@ -349,6 +462,8 @@ async function consultarOrderMercadoPago(
     console.error(
       "Erro ao consultar Order no Mercado Pago:",
       {
+        orderId,
+
         status:
           resposta.status,
 
@@ -358,8 +473,8 @@ async function consultarOrderMercadoPago(
         error:
           resultado?.error,
 
-        errors:
-          resultado?.errors,
+        cause:
+          resultado?.cause,
       }
     );
 
@@ -373,14 +488,166 @@ async function consultarOrderMercadoPago(
   return resultado;
 }
 
+async function reembolsarOrderMercadoPago(
+  orderId,
+  chaveIdempotencia
+) {
+  if (!orderId) {
+    throw new Error(
+      "ID da Order não informado para reembolso."
+    );
+  }
+
+
+  if (!chaveIdempotencia) {
+    throw new Error(
+      "Chave de idempotência do reembolso não informada."
+    );
+  }
+
+
+  const accessToken =
+    obterAccessToken();
+
+
+  const resposta = await fetch(
+  `${MERCADO_PAGO_API}/v1/orders/${encodeURIComponent(orderId)}/refund`,
+  {
+    method: "POST",
+
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      "X-Idempotency-Key": chaveIdempotencia,
+    },
+  }
+);
+
+
+  const resultado =
+    await lerRespostaJson(
+      resposta
+    );
+
+
+  /**
+   * A API pode responder que a Order já
+   * foi reembolsada.
+   *
+   * Nesse caso não devemos tentar devolver
+   * dinheiro novamente.
+   */
+
+  const codigoErro =
+    resultado?.code ||
+    resultado?.error ||
+    resultado?.errors?.[0]?.code;
+
+
+  if (
+    resposta.status === 409 &&
+    codigoErro ===
+      "order_already_refunded"
+  ) {
+    console.log(
+      `Order ${orderId} já estava reembolsada.`
+    );
+
+    return await consultarOrderMercadoPago(
+      orderId
+    );
+  }
+
+
+  if (!resposta.ok) {
+    console.error(
+  "ERRO AO REEMBOLSAR ORDER:"
+);
+
+console.error(
+  JSON.stringify(
+    {
+      orderId,
+      statusHttp: resposta.status,
+      resposta: sanitizarObjeto(resultado),
+    },
+    null,
+    2
+  )
+);
+
+
+    throw criarErroMercadoPago(
+      resposta,
+      resultado,
+      "Erro ao reembolsar Order no Mercado Pago."
+    );
+  }
+
+
+  console.log(
+    "REEMBOLSO SOLICITADO AO MERCADO PAGO:",
+    {
+      orderId,
+
+      status:
+        resultado?.status,
+
+      statusDetail:
+        resultado?.status_detail,
+
+      refunds:
+        resultado
+          ?.transactions
+          ?.refunds
+          ?.map((refund) => ({
+            id:
+              refund.id,
+
+            status:
+              refund.status,
+
+            amount:
+              refund.amount,
+          })) || [],
+    }
+  );
+
+
+  return resultado;
+}
+
+/**
+ * =========================================
+ * TRANSAÇÃO DA ORDER
+ * =========================================
+ */
+
+function obterTransacaoPagamento(
+  order
+) {
+  const pagamentos =
+    order
+      ?.transactions
+      ?.payments;
+
+  if (
+    !Array.isArray(
+      pagamentos
+    ) ||
+    pagamentos.length === 0
+  ) {
+    return null;
+  }
+
+  return pagamentos[0];
+}
 
 /**
  * =========================================
  * DIAGNÓSTICO
  * =========================================
- *
- * Agora utiliza a mesma aplicação
- * utilizada pelas Orders.
  */
 
 export async function diagnosticarMercadoPago() {
@@ -391,7 +658,8 @@ export async function diagnosticarMercadoPago() {
     await fetch(
       `${MERCADO_PAGO_API}/v1/payment_methods`,
       {
-        method: "GET",
+        method:
+          "GET",
 
         headers: {
           Authorization:
@@ -419,24 +687,25 @@ export async function diagnosticarMercadoPago() {
   const meiosPagamento =
     Array.isArray(resultado)
       ? resultado.map(
-          (metodo) => ({
-            id:
-              metodo.id,
+        (metodo) => ({
+          id:
+            metodo.id,
 
-            nome:
-              metodo.name,
+          nome:
+            metodo.name,
 
-            tipo:
-              metodo.payment_type_id,
+          tipo:
+            metodo.payment_type_id,
 
-            status:
-              metodo.status,
-          })
-        )
+          status:
+            metodo.status,
+        })
+      )
       : resultado;
 
   return {
-    autenticado: true,
+    autenticado:
+      true,
 
     statusHttp:
       resposta.status,
@@ -445,234 +714,110 @@ export async function diagnosticarMercadoPago() {
   };
 }
 
-
 /**
  * =========================================
- * INTERPRETAR STATUS
+ * STATUS DA ORDER
  * =========================================
- *
- * Converte os status da Orders API
- * para os status da aplicação.
  */
 
-function interpretarStatusPagamento(
+function interpretarStatusOrder(
   order
 ) {
-  const transacao =
-    order
-      ?.transactions
-      ?.payments
-      ?.[0];
-
-  const statusOrder =
-    order?.status;
-
-  const detalheOrder =
-    order?.status_detail;
-
-  const statusTransacao =
-    transacao?.status;
-
-  const detalheTransacao =
-    transacao?.status_detail;
-
-
   /**
-   * APROVADO
+   * =========================================
+   * REEMBOLSO DA ORDER
+   * =========================================
    */
 
   if (
-    statusOrder === "processed" &&
-    detalheOrder === "accredited" &&
-    (
-      !statusTransacao ||
-      (
-        statusTransacao ===
-          "processed" &&
-        detalheTransacao ===
-          "accredited"
-      )
-    )
+    order?.status === "refunded" ||
+    order?.status_detail === "refunded"
+  ) {
+    return "REEMBOLSADO";
+  }
+
+
+  const transacao =
+    obterTransacaoPagamento(
+      order
+    );
+
+
+  const status =
+    transacao?.status ||
+    order?.status;
+
+
+  const detalhe =
+    transacao?.status_detail ||
+    order?.status_detail;
+
+
+  if (
+    status === "processed"
   ) {
     return "APROVADO";
   }
 
 
-  /**
-   * REEMBOLSADO
-   */
-
   if (
-    statusOrder === "refunded" ||
-    statusTransacao === "refunded"
-  ) {
-    return "REEMBOLSADO";
-  }
-
-
-  /**
-   * CHARGEBACK
-   *
-   * Como nosso enum ainda não possui
-   * CHARGEBACK, tratamos como reembolso.
-   */
-
-  if (
-    statusOrder === "charged_back" ||
-    statusTransacao === "charged_back"
-  ) {
-    return "REEMBOLSADO";
-  }
-
-
-  /**
-   * EXPIRADO
-   */
-
-  if (
-    (
-      statusOrder === "canceled" &&
-      detalheOrder === "expired"
-    ) ||
-    (
-      statusOrder === "failed" &&
-      detalheOrder === "expired"
-    ) ||
-    statusTransacao === "expired" ||
-    detalheTransacao === "expired"
-  ) {
-    return "EXPIRADO";
-  }
-
-
-  /**
-   * CANCELADO
-   */
-
-  if (
-    statusOrder === "canceled" ||
-    statusTransacao === "canceled"
-  ) {
-    return "CANCELADO";
-  }
-
-
-  /**
-   * RECUSADO
-   */
-
-  if (
-    statusOrder === "failed" ||
-    statusTransacao === "failed"
-  ) {
-    return "RECUSADO";
-  }
-
-
-  /**
-   * PENDENTE
-   */
-
-  if (
-    statusOrder === "created" ||
-    statusOrder ===
-      "action_required" ||
-    statusTransacao ===
-      "created" ||
-    statusTransacao ===
-      "action_required"
-  ) {
-    return "PENDENTE";
-  }
-
-
-  /**
-   * PROCESSANDO
-   */
-
-  if (
-    statusOrder === "processing" ||
-    statusTransacao ===
-      "processing"
+    status === "processing"
   ) {
     return "PROCESSANDO";
   }
 
 
-  /**
-   * Status desconhecido.
-   */
+  if (
+    status === "action_required" ||
+    status === "created"
+  ) {
+    return "PENDENTE";
+  }
+
+
+  if (
+    status === "failed"
+  ) {
+    if (
+      detalhe === "expired"
+    ) {
+      return "EXPIRADO";
+    }
+
+    return "RECUSADO";
+  }
+
+
+  if (
+    status === "canceled"
+  ) {
+    if (
+      detalhe === "expired"
+    ) {
+      return "EXPIRADO";
+    }
+
+    return "CANCELADO";
+  }
+
+
+  if (
+    status === "expired"
+  ) {
+    return "EXPIRADO";
+  }
+
+
+  if (
+    status === "refunded" ||
+    status === "charged_back"
+  ) {
+    return "REEMBOLSADO";
+  }
+
 
   return null;
 }
-
-
-/**
- * =========================================
- * SANITIZAR ORDER
- * =========================================
- *
- * Remove possíveis informações sensíveis
- * antes de salvar a resposta no banco.
- */
-
-function sanitizarOrder(order) {
-  if (
-    !order ||
-    typeof order !== "object"
-  ) {
-    return order;
-  }
-
-  const orderSanitizada =
-    structuredClone(order);
-
-  const pagamentos =
-    orderSanitizada
-      .transactions
-      ?.payments;
-
-  if (
-    Array.isArray(
-      pagamentos
-    )
-  ) {
-    for (
-      const pagamento
-      of pagamentos
-    ) {
-      const metodo =
-        pagamento
-          ?.payment_method;
-
-      if (
-        metodo &&
-        typeof metodo ===
-          "object"
-      ) {
-        delete metodo.token;
-
-        delete metodo.security_code;
-
-        delete metodo.cvv;
-
-        delete metodo.card_number;
-
-        delete metodo.number;
-      }
-
-      delete pagamento?.token;
-
-      delete pagamento
-        ?.security_code;
-
-      delete pagamento?.cvv;
-    }
-  }
-
-  return orderSanitizada;
-}
-
 
 /**
  * =========================================
@@ -685,26 +830,23 @@ function podeAlterarStatus(
   novoStatus
 ) {
   if (
-    statusAtual === novoStatus
+    statusAtual ===
+    novoStatus
   ) {
     return false;
   }
 
-
   /**
-   * Um pagamento aprovado só pode
-   * avançar para reembolsado.
+   * Depois de aprovado não podemos
+   * voltar para pendente/processando/etc.
    */
 
   if (
-    statusAtual ===
-      "APROVADO" &&
-    novoStatus !==
-      "REEMBOLSADO"
+    statusAtual === "APROVADO" &&
+    novoStatus !== "REEMBOLSADO"
   ) {
     return false;
   }
-
 
   /**
    * Reembolso é final.
@@ -712,7 +854,7 @@ function podeAlterarStatus(
 
   if (
     statusAtual ===
-      "REEMBOLSADO"
+    "REEMBOLSADO"
   ) {
     return false;
   }
@@ -720,23 +862,21 @@ function podeAlterarStatus(
   return true;
 }
 
-
 /**
  * =========================================
- * APLICAR ORDER AO PAGAMENTO
+ * APLICAR ORDER AO PAGAMENTO LOCAL
  * =========================================
- *
- * Fonte única de verdade para:
- *
- * - criação;
- * - polling;
- * - webhook.
  */
 
 async function aplicarOrderAoPagamento(
   pagamento,
-  order
+  order,
+  opcoes = {}
 ) {
+  const {
+    permitirReembolsoAutomatico = true,
+  } = opcoes;
+
   if (!pagamento?.pedido) {
     throw new Error(
       "O pagamento local precisa incluir o pedido para aplicar a Order."
@@ -745,13 +885,15 @@ async function aplicarOrderAoPagamento(
 
 
   /**
-   * Garantir que a Order pertence
-   * à tentativa correta.
+   * =========================================
+   * VALIDAR REFERÊNCIA
+   * =========================================
    */
 
   if (
-    order?.external_reference !==
-    pagamento.referenciaExterna
+    order?.external_reference &&
+    order.external_reference !==
+      pagamento.referenciaExterna
   ) {
     throw new Error(
       "A referência da Order não corresponde ao pagamento."
@@ -759,15 +901,21 @@ async function aplicarOrderAoPagamento(
   }
 
 
+  /**
+   * =========================================
+   * INTERPRETAR STATUS
+   * =========================================
+   */
+
   const novoStatus =
-    interpretarStatusPagamento(
+    interpretarStatusOrder(
       order
     );
 
 
   if (!novoStatus) {
     throw new Error(
-      `Status de pagamento não reconhecido: ${
+      `Status de Order não reconhecido: ${
         order?.status ||
         "desconhecido"
       } / ${
@@ -779,18 +927,59 @@ async function aplicarOrderAoPagamento(
 
 
   const transacao =
-    order
-      ?.transactions
-      ?.payments
-      ?.[0];
+    obterTransacaoPagamento(
+      order
+    );
 
 
   /**
-   * Se nada mudou, não precisamos
-   * atualizar status.
-   *
-   * Mesmo assim, mantemos o snapshot
-   * mais recente da Order.
+   * =========================================
+   * DETALHES
+   * =========================================
+   */
+
+  const detalhesAtuais =
+    pagamento.detalhes &&
+    typeof pagamento.detalhes ===
+      "object"
+      ? pagamento.detalhes
+      : {};
+
+
+  const novosDetalhes = {
+    ...detalhesAtuais,
+
+    ultimaOrder:
+      sanitizarObjeto(
+        order
+      ),
+  };
+
+
+  const dadosAtualizacao = {
+    provedorOrdemId:
+      order?.id != null
+        ? String(
+            order.id
+          )
+        : pagamento.provedorOrdemId,
+
+    provedorPagamentoId:
+      transacao?.id != null
+        ? String(
+            transacao.id
+          )
+        : pagamento.provedorPagamentoId,
+
+    detalhes:
+      novosDetalhes,
+  };
+
+
+  /**
+   * =========================================
+   * STATUS NÃO MUDOU
+   * =========================================
    */
 
   if (
@@ -800,79 +989,44 @@ async function aplicarOrderAoPagamento(
     )
   ) {
     console.log(
-      `Pagamento ${pagamento.id}: ${pagamento.status} → ${novoStatus}. Nenhuma alteração necessária.`
+      `Pagamento ${pagamento.id}: ${pagamento.status} → ${novoStatus}. Nenhuma alteração de status necessária.`
     );
 
 
-    await prisma.pagamento.update({
-      where: {
-        id:
-          pagamento.id,
-      },
-
-      data: {
-        provedorOrdemId:
-          order?.id != null
-            ? String(order.id)
-            : pagamento.provedorOrdemId,
-
-        provedorPagamentoId:
-          transacao?.id != null
-            ? String(transacao.id)
-            : pagamento.provedorPagamentoId,
-
-        detalhes: {
-          ...(
-            pagamento.detalhes &&
-            typeof pagamento.detalhes ===
-              "object"
-              ? pagamento.detalhes
-              : {}
-          ),
-
-          ultimaOrder:
-            sanitizarOrder(
-              order
-            ),
+    const pagamentoAtualizado =
+      await prisma.pagamento.update({
+        where: {
+          id:
+            pagamento.id,
         },
-      },
-    });
+
+        data:
+          dadosAtualizacao,
+      });
+
+
+    /**
+     * Buscamos o pedido novamente.
+     *
+     * Não retornamos o objeto antigo que
+     * veio junto com pagamento.
+     */
+
+    const pedidoAtualizado =
+      await prisma.pedido.findUnique({
+        where: {
+          id:
+            pagamento.pedidoId,
+        },
+      });
 
 
     return {
-      pagamento: {
-        ...pagamento,
-
-        provedorOrdemId:
-          order?.id != null
-            ? String(order.id)
-            : pagamento.provedorOrdemId,
-
-        provedorPagamentoId:
-          transacao?.id != null
-            ? String(
-                transacao.id
-              )
-            : pagamento.provedorPagamentoId,
-
-        detalhes: {
-          ...(
-            pagamento.detalhes &&
-            typeof pagamento.detalhes ===
-              "object"
-              ? pagamento.detalhes
-              : {}
-          ),
-
-          ultimaOrder:
-            sanitizarOrder(
-              order
-            ),
-        },
-      },
+      pagamento:
+        pagamentoAtualizado,
 
       pedido:
-        pagamento.pedido,
+        pedidoAtualizado,
 
       alterado:
         false,
@@ -881,13 +1035,27 @@ async function aplicarOrderAoPagamento(
 
 
   /**
-   * Atualiza pagamento e pedido
-   * na mesma transação.
+   * =========================================
+   * STATUS MUDOU
+   * =========================================
    */
 
   const resultado =
     await prisma.$transaction(
       async (tx) => {
+
+        /**
+         * Primeiro atualizamos o pagamento.
+         *
+         * O pagamento representa aquilo que
+         * aconteceu no Mercado Pago.
+         *
+         * Portanto, se o Mercado Pago recebeu
+         * o dinheiro, o pagamento local pode
+         * ficar APROVADO mesmo que o pedido
+         * tenha expirado.
+         */
+
         const pagamentoAtualizado =
           await tx.pagamento.update({
             where: {
@@ -896,62 +1064,363 @@ async function aplicarOrderAoPagamento(
             },
 
             data: {
+              ...dadosAtualizacao,
+
               status:
                 novoStatus,
-
-              provedorOrdemId:
-                order?.id != null
-                  ? String(
-                      order.id
-                    )
-                  : pagamento.provedorOrdemId,
-
-              provedorPagamentoId:
-                transacao?.id != null
-                  ? String(
-                      transacao.id
-                    )
-                  : pagamento.provedorPagamentoId,
-
-              detalhes: {
-                ...(
-                  pagamento.detalhes &&
-                  typeof pagamento.detalhes ===
-                    "object"
-                    ? pagamento.detalhes
-                    : {}
-                ),
-
-                ultimaOrder:
-                  sanitizarOrder(
-                    order
-                  ),
-              },
             },
           });
 
 
+        /**
+         * =====================================
+         * BUSCAR ESTADO REAL DO PEDIDO
+         * =====================================
+         *
+         * Não usamos:
+         *
+         * pagamento.pedido.status
+         *
+         * porque esse objeto pode ter sido
+         * carregado antes da rotina de
+         * expiração cancelar o pedido.
+         */
+
         let pedidoAtualizado =
-          pagamento.pedido;
+          await tx.pedido.findUnique({
+            where: {
+              id:
+                pagamento.pedidoId,
+            },
+          });
+
+
+        if (!pedidoAtualizado) {
+          throw new Error(
+            "Pedido do pagamento não encontrado."
+          );
+        }
 
 
         /**
-         * Pedido passa para PAGO
-         * somente após aprovação.
+         * =====================================
+         * PAGAMENTO APROVADO
+         * =====================================
          */
 
         if (
           novoStatus ===
-            "APROVADO" &&
-          pagamento.pedido
-            .status ===
-            "PENDENTE"
+          "APROVADO"
         ) {
-          pedidoAtualizado =
-            await tx.pedido.update({
+
+          /**
+           * ===================================
+           * PAGAMENTO TARDIO
+           * ===================================
+           *
+           * Se o pedido já foi cancelado,
+           * NÃO podemos reativá-lo.
+           *
+           * O estoque já pode ter sido
+           * devolvido e até vendido para
+           * outra pessoa.
+           */
+
+          if (
+            pedidoAtualizado.status ===
+            "CANCELADO"
+          ) {
+            console.error(
+              "PAGAMENTO APROVADO PARA PEDIDO CANCELADO:",
+              {
+                pedidoId:
+                  pedidoAtualizado.id,
+
+                pagamentoId:
+                  pagamentoAtualizado.id,
+
+                orderId:
+                  order?.id,
+
+                paymentId:
+                  transacao?.id,
+              }
+            );
+
+
+            /**
+             * Registramos no pagamento que
+             * houve uma aprovação tardia.
+             *
+             * Futuramente podemos usar isso
+             * para iniciar reembolso
+             * automático.
+             */
+
+            const detalhesPagamentoTardio = {
+              ...novosDetalhes,
+
+              pagamentoTardio: {
+                detectado:
+                  true,
+
+                detectadoEm:
+                  new Date()
+                    .toISOString(),
+
+                statusPedido:
+                  pedidoAtualizado.status,
+
+                expiraEm:
+                  pedidoAtualizado.expiraEm
+                    ? pedidoAtualizado
+                        .expiraEm
+                        .toISOString()
+                    : null,
+              },
+            };
+
+
+            const pagamentoTardio =
+              await tx.pagamento.update({
+                where: {
+                  id:
+                    pagamentoAtualizado.id,
+                },
+
+                data: {
+                  detalhes:
+                    detalhesPagamentoTardio,
+                },
+              });
+
+
+            return {
+              pagamento:
+                pagamentoTardio,
+
+              pedido:
+                pedidoAtualizado,
+
+              pagamentoTardio:
+                true,
+            };
+          }
+
+
+          /**
+           * ===================================
+           * PRAZO JÁ TERMINOU
+           * ===================================
+           *
+           * Esta verificação protege a janela
+           * entre:
+           *
+           * expiraEm
+           *
+           * e
+           *
+           * execução da rotina periódica.
+           */
+
+          const prazoExpirado =
+            pedidoAtualizado.expiraEm &&
+            pedidoAtualizado
+              .expiraEm
+              .getTime() <=
+              Date.now();
+
+
+          if (
+            prazoExpirado
+          ) {
+            console.error(
+              "PAGAMENTO APROVADO APÓS O PRAZO DO PEDIDO:",
+              {
+                pedidoId:
+                  pedidoAtualizado.id,
+
+                pagamentoId:
+                  pagamentoAtualizado.id,
+
+                expiraEm:
+                  pedidoAtualizado.expiraEm,
+
+                orderId:
+                  order?.id,
+              }
+            );
+
+
+            /**
+             * Tentamos cancelar o pedido
+             * SOMENTE se ele ainda estiver
+             * PENDENTE.
+             *
+             * Isso funciona como um claim
+             * atômico.
+             */
+
+            const cancelamento =
+              await tx.pedido.updateMany({
+                where: {
+                  id:
+                    pedidoAtualizado.id,
+
+                  status:
+                    "PENDENTE",
+                },
+
+                data: {
+                  status:
+                    "CANCELADO",
+                },
+              });
+
+
+            /**
+             * Se conseguimos cancelar agora,
+             * precisamos devolver o estoque.
+             *
+             * A rotina periódica não irá
+             * devolver novamente porque o
+             * pedido já estará CANCELADO.
+             */
+
+            if (
+              cancelamento.count === 1
+            ) {
+              const itens =
+                await tx.itemPedido.findMany({
+                  where: {
+                    pedidoId:
+                      pedidoAtualizado.id,
+                  },
+                });
+
+
+              for (
+                const item of itens
+              ) {
+                await tx.produto.update({
+                  where: {
+                    id:
+                      item.produtoId,
+                  },
+
+                  data: {
+                    estoque: {
+                      increment:
+                        item.quantidade,
+                    },
+                  },
+                });
+              }
+            }
+
+
+            pedidoAtualizado =
+              await tx.pedido.findUnique({
+                where: {
+                  id:
+                    pagamento.pedidoId,
+                },
+              });
+
+
+            const detalhesPagamentoTardio = {
+              ...novosDetalhes,
+
+              pagamentoTardio: {
+                detectado:
+                  true,
+
+                detectadoEm:
+                  new Date()
+                    .toISOString(),
+
+                statusPedido:
+                  pedidoAtualizado
+                    ?.status,
+
+                expiraEm:
+                  pedidoAtualizado
+                    ?.expiraEm
+                    ? pedidoAtualizado
+                        .expiraEm
+                        .toISOString()
+                    : null,
+              },
+            };
+
+
+            const pagamentoTardio =
+              await tx.pagamento.update({
+                where: {
+                  id:
+                    pagamentoAtualizado.id,
+                },
+
+                data: {
+                  detalhes:
+                    detalhesPagamentoTardio,
+                },
+              });
+
+
+            return {
+              pagamento:
+                pagamentoTardio,
+
+              pedido:
+                pedidoAtualizado,
+
+              pagamentoTardio:
+                true,
+            };
+          }
+
+
+          /**
+           * ===================================
+           * PENDENTE → PAGO
+           * ===================================
+           *
+           * Esta atualização é condicional.
+           *
+           * Portanto não existe:
+           *
+           * CANCELADO → PAGO
+           *
+           * nem:
+           *
+           * ENTREGUE → PAGO
+           *
+           * etc.
+           */
+
+          const atualizacaoPedido =
+            await tx.pedido.updateMany({
               where: {
                 id:
                   pagamento.pedidoId,
+
+                status:
+                  "PENDENTE",
+
+                OR: [
+                  {
+                    expiraEm:
+                      null,
+                  },
+
+                  {
+                    expiraEm: {
+                      gt:
+                        new Date(),
+                    },
+                  },
+                ],
               },
 
               data: {
@@ -959,6 +1428,50 @@ async function aplicarOrderAoPagamento(
                   "PAGO",
               },
             });
+
+
+          /**
+           * Buscamos novamente porque outra
+           * operação pode ter alterado o
+           * pedido concorrentemente.
+           */
+
+          pedidoAtualizado =
+            await tx.pedido.findUnique({
+              where: {
+                id:
+                  pagamento.pedidoId,
+              },
+            });
+
+
+          /**
+           * Se não atualizamos para PAGO,
+           * significa que outra operação
+           * ganhou a corrida.
+           */
+
+          if (
+            atualizacaoPedido.count !==
+              1 &&
+            pedidoAtualizado?.status !==
+              "PAGO"
+          ) {
+            console.warn(
+              "Pagamento aprovado, mas pedido não pôde ser marcado como PAGO:",
+              {
+                pedidoId:
+                  pagamento.pedidoId,
+
+                statusPedido:
+                  pedidoAtualizado
+                    ?.status,
+
+                pagamentoId:
+                  pagamentoAtualizado.id,
+              }
+            );
+          }
         }
 
 
@@ -968,19 +1481,147 @@ async function aplicarOrderAoPagamento(
 
           pedido:
             pedidoAtualizado,
+
+          pagamentoTardio:
+            false,
         };
       }
     );
 
 
-  return {
-    ...resultado,
+  const respostaAplicacao = {
+  ...resultado,
 
-    alterado:
-      true,
-  };
+  alterado:
+    true,
+};
+
+
+/**
+ * =========================================
+ * REEMBOLSO AUTOMÁTICO
+ * =========================================
+ *
+ * Somente depois da transação do banco
+ * ter terminado.
+ */
+
+if (
+  permitirReembolsoAutomatico &&
+  resultado.pagamentoTardio ===
+    true &&
+  resultado.pagamento?.status ===
+    "APROVADO" &&
+  resultado.pedido?.status ===
+    "CANCELADO"
+) {
+  try {
+    const reembolso =
+      await processarReembolsoPagamentoTardio(
+        resultado.pagamento,
+        resultado.pedido
+      );
+
+
+    console.log(
+      "RESULTADO DO REEMBOLSO AUTOMÁTICO:",
+      {
+        pagamentoId:
+          resultado.pagamento.id,
+
+        pedidoId:
+          resultado.pedido.id,
+
+        solicitado:
+          reembolso.solicitado,
+
+        statusPagamento:
+          reembolso.pagamento
+            ?.status ||
+          resultado.pagamento
+            .status,
+      }
+    );
+
+
+    if (
+      reembolso.pagamento
+    ) {
+      respostaAplicacao.pagamento =
+        reembolso.pagamento;
+    }
+  } catch (erro) {
+    /**
+     * MUITO IMPORTANTE:
+     *
+     * falha no reembolso NÃO transforma
+     * o pedido novamente em PAGO.
+     */
+
+    console.error(
+      "FALHA NO REEMBOLSO AUTOMÁTICO DE PAGAMENTO TARDIO:",
+      {
+        pagamentoId:
+          resultado.pagamento.id,
+
+        pedidoId:
+          resultado.pedido.id,
+
+        orderId:
+          resultado.pagamento
+            .provedorOrdemId,
+
+        erro:
+          erro.message,
+      }
+    );
+
+
+    /**
+     * Registramos que o reembolso precisa
+     * ser tentado novamente.
+     */
+
+    const detalhes =
+      resultado.pagamento
+        .detalhes &&
+      typeof resultado.pagamento
+        .detalhes === "object"
+        ? resultado.pagamento
+            .detalhes
+        : {};
+
+
+    await prisma.pagamento.update({
+      where: {
+        id:
+          resultado.pagamento.id,
+      },
+
+      data: {
+        detalhes: {
+          ...detalhes,
+
+          reembolsoAutomatico: {
+            status:
+              "FALHOU",
+
+            ultimaTentativaEm:
+              new Date()
+                .toISOString(),
+
+            erro:
+              erro.message,
+          },
+        },
+      },
+    });
+  }
 }
 
+
+return respostaAplicacao;
+}
 
 /**
  * =========================================
@@ -992,46 +1633,105 @@ async function buscarPedidoParaPagamento(
   pedidoId,
   usuarioId
 ) {
+  if (!pedidoId) {
+    const erro =
+      new Error(
+        "Pedido não informado."
+      );
+
+    erro.status = 400;
+
+    throw erro;
+  }
+
+
   const pedido =
     await prisma.pedido.findFirst({
       where: {
-        id:
-          pedidoId,
-
+        id: pedidoId,
         usuarioId,
       },
 
       include: {
-        usuario:
-          true,
+        usuario: true,
       },
     });
 
 
   if (!pedido) {
-    throw new Error(
-      "Pedido não encontrado."
-    );
+    const erro =
+      new Error(
+        "Pedido não encontrado."
+      );
+
+    erro.status = 404;
+
+    throw erro;
   }
 
 
+  /**
+   * =========================================
+   * PEDIDO NÃO ESTÁ MAIS PENDENTE
+   * =========================================
+   */
+
   if (
     pedido.status !==
-      "PENDENTE"
+    "PENDENTE"
   ) {
-    throw new Error(
-      "Este pedido não está disponível para pagamento."
-    );
+    const erro =
+      new Error(
+        "Este pedido não está disponível para pagamento."
+      );
+
+    erro.status = 409;
+
+    throw erro;
+  }
+
+
+  /**
+   * =========================================
+   * VALIDAR PRAZO DO PEDIDO
+   * =========================================
+   *
+   * Não dependemos da rotina periódica para
+   * bloquear um pagamento.
+   *
+   * Pode acontecer:
+   *
+   * 12:30:00 -> pedido vence
+   * 12:30:20 -> rotina ainda não executou
+   *
+   * Nesse intervalo o status no banco ainda
+   * poderia ser PENDENTE.
+   *
+   * Portanto expiraEm também é validado aqui.
+   */
+
+  if (
+    pedido.expiraEm &&
+    pedido.expiraEm.getTime() <=
+      Date.now()
+  ) {
+    const erro =
+      new Error(
+        "O prazo para pagamento deste pedido expirou."
+      );
+
+    erro.status = 409;
+
+    throw erro;
   }
 
 
   return pedido;
 }
 
-
 /**
  * =========================================
- * VERIFICAR TENTATIVA ATIVA
+ * TENTATIVA ATIVA
  * =========================================
  */
 
@@ -1057,7 +1757,6 @@ async function validarAusenciaTentativaAtiva(
       },
     });
 
-
   if (
     pagamentoExistente
   ) {
@@ -1067,38 +1766,85 @@ async function validarAusenciaTentativaAtiva(
   }
 }
 
+/**
+ * =========================================
+ * PAYER
+ * =========================================
+ */
+
+function montarPayer(
+  pedido,
+  payerRecebido = {}
+) {
+  const email =
+    payerRecebido?.email ||
+    pedido?.usuario?.email;
+
+  const tipoDocumento =
+    payerRecebido
+      ?.identification
+      ?.type;
+
+  const numeroDocumento =
+    payerRecebido
+      ?.identification
+      ?.number;
+
+  const payer = {};
+
+  if (email) {
+    payer.email =
+      String(email)
+        .trim()
+        .toLowerCase();
+  }
+
+  if (
+    tipoDocumento &&
+    numeroDocumento
+  ) {
+    payer.identification = {
+      type:
+        String(
+          tipoDocumento
+        )
+          .trim()
+          .toUpperCase(),
+
+      number:
+        String(
+          numeroDocumento
+        ).replace(
+          /\D/g,
+          ""
+        ),
+    };
+  }
+
+  return payer;
+}
 
 /**
  * =========================================
  * EXTRAIR ORDER DE ERRO
  * =========================================
- *
- * O Mercado Pago pode retornar uma
- * Order válida mesmo junto de erro HTTP.
  */
 
 function obterOrderDeErro(
   erro
 ) {
   const order =
-    erro
-      ?.detalhes
-      ?.data;
+    erro?.detalhes;
 
   if (
     order?.id &&
-    order
-      ?.transactions
-      ?.payments
-      ?.[0]
-      ?.id
+    order?.status
   ) {
     return order;
   }
 
   return null;
 }
-
 
 /**
  * =========================================
@@ -1117,17 +1863,18 @@ async function registrarFalhaParaReconciliacao(
   );
 
   try {
+    const detalhesAtuais =
+      pagamento.detalhes &&
+        typeof pagamento.detalhes ===
+        "object"
+        ? pagamento.detalhes
+        : {};
+
     await atualizarPagamento(
       pagamento.id,
       {
         detalhes: {
-          ...(
-            pagamento.detalhes &&
-            typeof pagamento.detalhes ===
-              "object"
-              ? pagamento.detalhes
-              : {}
-          ),
+          ...detalhesAtuais,
 
           erro:
             erro.message,
@@ -1138,24 +1885,9 @@ async function registrarFalhaParaReconciliacao(
 
           resposta:
             erro.detalhes
-              ? {
-                  errors:
-                    erro
-                      .detalhes
-                      .errors ||
-                    null,
-
-                  data:
-                    erro
-                      .detalhes
-                      .data
-                      ? sanitizarOrder(
-                          erro
-                            .detalhes
-                            .data
-                        )
-                      : null,
-                }
+              ? sanitizarObjeto(
+                erro.detalhes
+              )
               : null,
 
           aguardandoReconciliacao:
@@ -1164,7 +1896,7 @@ async function registrarFalhaParaReconciliacao(
       }
     );
   } catch (
-    erroBanco
+  erroBanco
   ) {
     console.error(
       "Erro ao registrar detalhes da falha:",
@@ -1173,150 +1905,14 @@ async function registrarFalhaParaReconciliacao(
   }
 }
 
-
-/**
- * =========================================
- * DETALHES DO CARTÃO
- * =========================================
- */
-
-function montarDetalhesCartao(
-  transacao,
-  paymentMethodId,
-  parcelas
-) {
-  const metodoRetornado =
-    transacao
-      ?.payment_method ||
-    {};
-
-
-  const detalhesCartao = {
-    bandeira:
-      metodoRetornado.id ||
-      paymentMethodId,
-
-    parcelas,
-  };
-
-
-  if (
-    metodoRetornado
-      .last_four_digits
-  ) {
-    detalhesCartao.ultimos4 =
-      metodoRetornado
-        .last_four_digits;
-  }
-
-
-  return detalhesCartao;
-}
-
-
-/**
- * =========================================
- * PERSISTIR ORDER DE CARTÃO
- * =========================================
- */
-
-async function persistirOrderCartao({
-  pagamento,
-  pedido,
-  order,
-  paymentMethodId,
-  parcelas,
-}) {
-  const transacao =
-    order
-      ?.transactions
-      ?.payments
-      ?.[0];
-
-
-  if (
-    !order?.id ||
-    !transacao?.id
-  ) {
-    throw new Error(
-      "O Mercado Pago não retornou os identificadores esperados."
-    );
-  }
-
-
-  const detalhesCartao =
-    montarDetalhesCartao(
-      transacao,
-      paymentMethodId,
-      parcelas
-    );
-
-
-  const pagamentoPreparado =
-    await atualizarPagamento(
-      pagamento.id,
-      {
-        provedorOrdemId:
-          String(
-            order.id
-          ),
-
-        provedorPagamentoId:
-          String(
-            transacao.id
-          ),
-
-        detalhes: {
-          ...(
-            pagamento.detalhes &&
-            typeof pagamento.detalhes ===
-              "object"
-              ? pagamento.detalhes
-              : {}
-          ),
-
-          cartao:
-            detalhesCartao,
-        },
-      }
-    );
-
-
-  const aplicacao =
-    await aplicarOrderAoPagamento(
-      {
-        ...pagamentoPreparado,
-
-        pedido,
-      },
-
-      order
-    );
-
-
-  return {
-    pagamentoId:
-      aplicacao.pagamento.id,
-
-    status:
-      aplicacao.pagamento.status,
-
-    metodo:
-      aplicacao.pagamento.metodo,
-
-    valor:
-      pagamento.valor.toString(),
-
-    cartao:
-      detalhesCartao,
-  };
-}
-
-
 /**
  * =========================================
  * PIX
  * =========================================
+ *
+ * Orders API
+ *
+ * POST /v1/orders
  */
 
 export async function iniciarPagamentoPix(
@@ -1329,11 +1925,9 @@ export async function iniciarPagamentoPix(
       usuarioId
     );
 
-
   await validarAusenciaTentativaAtiva(
     pedidoId
   );
-
 
   const referenciaExterna =
     `AUR-${randomUUID()}`;
@@ -1341,14 +1935,19 @@ export async function iniciarPagamentoPix(
   const chaveIdempotencia =
     randomUUID();
 
+  /**
+   * Orders trabalha com valores
+   * monetários como String.
+   */
+
   const valor =
     pedido.valorTotal.toFixed(
       2
     );
 
-
   /**
-   * Criar pagamento local.
+   * Criamos primeiro nossa tentativa
+   * local.
    */
 
   const pagamento =
@@ -1372,9 +1971,13 @@ export async function iniciarPagamentoPix(
       chaveIdempotencia,
     });
 
+  const payer =
+    montarPayer(
+      pedido
+    );
 
   /**
-   * Montar Order.
+   * PAYLOAD ORDERS API - PIX
    */
 
   const dadosOrder = {
@@ -1390,29 +1993,23 @@ export async function iniciarPagamentoPix(
     processing_mode:
       "automatic",
 
-    payer: {
-      email:
-        pedido.usuario.email,
-    },
-
     transactions: {
       payments: [
         {
-          amount:
-            valor,
+          amount: valor,
 
           payment_method: {
-            id:
-              "pix",
-
-            type:
-              "bank_transfer",
+            id: "pix",
+            type: "bank_transfer",
           },
+
+          expiration_time: "PT30M",
         },
       ],
     },
-  };
 
+    payer,
+  };
 
   try {
     const order =
@@ -1421,44 +2018,59 @@ export async function iniciarPagamentoPix(
         chaveIdempotencia
       );
 
+    if (!order?.id) {
+      throw new Error(
+        "O Mercado Pago não retornou o identificador da Order Pix."
+      );
+    }
 
     const transacao =
-      order
-        ?.transactions
-        ?.payments
-        ?.[0];
+      obterTransacaoPagamento(
+        order
+      );
 
+    if (!transacao) {
+      throw new Error(
+        "A Order Pix foi criada, mas não retornou a transação de pagamento."
+      );
+    }
 
-    const metodoPagamento =
+    const paymentMethod =
       transacao
         ?.payment_method;
 
-
-    if (
-      !order?.id ||
-      !transacao?.id
-    ) {
-      throw new Error(
-        "O Mercado Pago não retornou os identificadores esperados."
-      );
-    }
-
-
-    if (
-      !metodoPagamento
-        ?.qr_code ||
-      !metodoPagamento
-        ?.qr_code_base64
-    ) {
-      throw new Error(
-        "A Order foi criada, mas os dados do QR Code não foram retornados."
-      );
-    }
-
-
     /**
-     * Salvar IDs e Pix.
+     * PIX pode ser criado de forma
+     * assíncrona.
+     *
+     * Portanto NÃO tratamos ausência
+     * imediata de QR Code como erro fatal.
      */
+
+    const pix =
+      paymentMethod?.qr_code
+        ? {
+          codigo:
+            paymentMethod.qr_code,
+
+          imagemBase64:
+            paymentMethod
+              .qr_code_base64 ||
+            null,
+
+          linkPagamento:
+            paymentMethod
+              .ticket_url ||
+            null,
+        }
+        : null;
+
+    const detalhesAtuais =
+      pagamento.detalhes &&
+        typeof pagamento.detalhes ===
+        "object"
+        ? pagamento.detalhes
+        : {};
 
     const pagamentoPreparado =
       await atualizarPagamento(
@@ -1470,33 +2082,23 @@ export async function iniciarPagamentoPix(
             ),
 
           provedorPagamentoId:
-            String(
-              transacao.id
-            ),
+            transacao?.id != null
+              ? String(
+                transacao.id
+              )
+              : null,
 
           detalhes: {
-            pix: {
-              codigo:
-                metodoPagamento
-                  .qr_code,
+            ...detalhesAtuais,
 
-              imagemBase64:
-                metodoPagamento
-                  .qr_code_base64,
-
-              linkPagamento:
-                metodoPagamento
-                  .ticket_url ||
-                null,
-            },
+            ...(pix
+              ? {
+                pix,
+              }
+              : {}),
           },
         }
       );
-
-
-    /**
-     * Aplicar status da Order.
-     */
 
     const aplicacao =
       await aplicarOrderAoPagamento(
@@ -1508,7 +2110,6 @@ export async function iniciarPagamentoPix(
 
         order
       );
-
 
     return {
       pagamentoId:
@@ -1522,170 +2123,284 @@ export async function iniciarPagamentoPix(
 
       valor,
 
-      pix: {
-        codigo:
-          metodoPagamento
-            .qr_code,
-
-        imagemBase64:
-          metodoPagamento
-            .qr_code_base64,
-
-        linkPagamento:
-          metodoPagamento
-            .ticket_url ||
-          null,
-      },
+      pix,
     };
   } catch (erro) {
-    /**
-     * Algumas respostas de erro podem
-     * conter uma Order válida.
-     */
-
     const orderRetornada =
       obterOrderDeErro(
         erro
       );
 
+    /**
+     * Caso MP tenha criado a Order,
+     * persistimos mesmo se a resposta
+     * HTTP tiver sido considerada erro.
+     */
 
-    if (
-      orderRetornada
-    ) {
-      const transacao =
-        orderRetornada
-          .transactions
-          ?.payments
-          ?.[0];
+    if (orderRetornada) {
+      try {
+        const transacao =
+          obterTransacaoPagamento(
+            orderRetornada
+          );
 
+        const paymentMethod =
+          transacao
+            ?.payment_method;
 
-      const metodoPagamento =
-        transacao
-          ?.payment_method;
-
-
-      const pagamentoPreparado =
-        await atualizarPagamento(
-          pagamento.id,
-          {
-            provedorOrdemId:
-              String(
-                orderRetornada.id
-              ),
-
-            provedorPagamentoId:
-              String(
-                transacao.id
-              ),
-
-            detalhes: {
-              ...(
-                metodoPagamento
-                  ?.qr_code
-                  ? {
-                      pix: {
-                        codigo:
-                          metodoPagamento
-                            .qr_code,
-
-                        imagemBase64:
-                          metodoPagamento
-                            .qr_code_base64 ||
-                          null,
-
-                        linkPagamento:
-                          metodoPagamento
-                            .ticket_url ||
-                          null,
-                      },
-                    }
-                  : {}
-              ),
-            },
-          }
-        );
-
-
-      const aplicacao =
-        await aplicarOrderAoPagamento(
-          {
-            ...pagamentoPreparado,
-
-            pedido,
-          },
-
-          orderRetornada
-        );
-
-
-      return {
-        pagamentoId:
-          aplicacao.pagamento.id,
-
-        status:
-          aplicacao.pagamento.status,
-
-        metodo:
-          aplicacao.pagamento.metodo,
-
-        valor,
-
-        pix:
-          metodoPagamento
-            ?.qr_code
+        const pix =
+          paymentMethod?.qr_code
             ? {
-                codigo:
-                  metodoPagamento
-                    .qr_code,
+              codigo:
+                paymentMethod
+                  .qr_code,
 
-                imagemBase64:
-                  metodoPagamento
-                    .qr_code_base64 ||
-                  null,
+              imagemBase64:
+                paymentMethod
+                  .qr_code_base64 ||
+                null,
 
-                linkPagamento:
-                  metodoPagamento
-                    .ticket_url ||
-                  null,
-              }
-            : null,
-      };
+              linkPagamento:
+                paymentMethod
+                  .ticket_url ||
+                null,
+            }
+            : null;
+
+        const detalhesAtuais =
+          pagamento.detalhes &&
+            typeof pagamento.detalhes ===
+            "object"
+            ? pagamento.detalhes
+            : {};
+
+        const pagamentoPreparado =
+          await atualizarPagamento(
+            pagamento.id,
+            {
+              provedorOrdemId:
+                String(
+                  orderRetornada.id
+                ),
+
+              provedorPagamentoId:
+                transacao?.id != null
+                  ? String(
+                    transacao.id
+                  )
+                  : null,
+
+              detalhes: {
+                ...detalhesAtuais,
+
+                ...(pix
+                  ? {
+                    pix,
+                  }
+                  : {}),
+              },
+            }
+          );
+
+        const aplicacao =
+          await aplicarOrderAoPagamento(
+            {
+              ...pagamentoPreparado,
+
+              pedido,
+            },
+
+            orderRetornada
+          );
+
+        return {
+          pagamentoId:
+            aplicacao.pagamento.id,
+
+          status:
+            aplicacao.pagamento.status,
+
+          metodo:
+            aplicacao.pagamento.metodo,
+
+          valor,
+
+          pix,
+        };
+      } catch (
+      erroPersistir
+      ) {
+        console.error(
+          "Erro ao persistir Order Pix retornada:",
+          erroPersistir
+        );
+
+        throw erroPersistir;
+      }
     }
-
 
     await registrarFalhaParaReconciliacao(
       pagamento,
       erro,
-      "Erro ao iniciar pagamento Pix:"
+      "Erro ao iniciar pagamento Pix via Orders:"
     );
-
 
     throw erro;
   }
 }
 
+/**
+ * =========================================
+ * DETALHES DO CARTÃO
+ * =========================================
+ */
+
+function montarDetalhesCartao(
+  order,
+  paymentMethodId,
+  parcelas
+) {
+  const transacao =
+    obterTransacaoPagamento(
+      order
+    );
+
+  const paymentMethod =
+    transacao
+      ?.payment_method;
+
+  const detalhesCartao = {
+    bandeira:
+      paymentMethod?.id ||
+      paymentMethodId,
+
+    parcelas:
+      paymentMethod
+        ?.installments ||
+      parcelas ||
+      1,
+  };
+
+  const ultimos4 =
+    paymentMethod
+      ?.card
+      ?.last_four_digits ||
+    transacao
+      ?.card
+      ?.last_four_digits;
+
+  if (ultimos4) {
+    detalhesCartao.ultimos4 =
+      ultimos4;
+  }
+
+  return detalhesCartao;
+}
 
 /**
  * =========================================
- * CARTÃO - NÚCLEO COMPARTILHADO
+ * PERSISTIR ORDER DE CARTÃO
  * =========================================
- *
- * Crédito e débito utilizam exatamente
- * o mesmo fluxo.
- *
- * A única diferença é:
- *
- * credit_card
- * debit_card
  */
 
-async function iniciarPagamentoCartaoViaOrder({
-  dados,
-  usuarioId,
-  metodoLocal,
-  tipoMercadoPago,
-  permitirParcelas,
+async function persistirOrderCartao({
+  pagamento,
+  pedido,
+  order,
+  paymentMethodId,
+  parcelas,
 }) {
+  if (!order?.id) {
+    throw new Error(
+      "O Mercado Pago não retornou o identificador da Order."
+    );
+  }
+
+  const transacao =
+    obterTransacaoPagamento(
+      order
+    );
+
+  const detalhesCartao =
+    montarDetalhesCartao(
+      order,
+      paymentMethodId,
+      parcelas
+    );
+
+  const detalhesAtuais =
+    pagamento.detalhes &&
+      typeof pagamento.detalhes ===
+      "object"
+      ? pagamento.detalhes
+      : {};
+
+  const pagamentoPreparado =
+    await atualizarPagamento(
+      pagamento.id,
+      {
+        provedorOrdemId:
+          String(
+            order.id
+          ),
+
+        provedorPagamentoId:
+          transacao?.id != null
+            ? String(
+              transacao.id
+            )
+            : null,
+
+        detalhes: {
+          ...detalhesAtuais,
+
+          cartao:
+            detalhesCartao,
+        },
+      }
+    );
+
+  const aplicacao =
+    await aplicarOrderAoPagamento(
+      {
+        ...pagamentoPreparado,
+
+        pedido,
+      },
+
+      order
+    );
+
+  return {
+    pagamentoId:
+      aplicacao.pagamento.id,
+
+    status:
+      aplicacao.pagamento.status,
+
+    metodo:
+      aplicacao.pagamento.metodo,
+
+    valor:
+      pagamento.valor.toString(),
+
+    cartao:
+      detalhesCartao,
+  };
+}
+
+/**
+ * =========================================
+ * CARTÃO DE CRÉDITO
+ * =========================================
+ *
+ * Orders API
+ */
+
+export async function iniciarPagamentoCartao(
+  dados,
+  usuarioId
+) {
   const {
     pedidoId,
     token,
@@ -1694,113 +2409,60 @@ async function iniciarPagamentoCartaoViaOrder({
     payer,
   } = dados;
 
-
-  /**
-   * Buscar pedido.
-   */
-
   const pedido =
     await buscarPedidoParaPagamento(
       pedidoId,
       usuarioId
     );
 
-
-  /**
-   * Evitar duas tentativas simultâneas.
-   */
-
   await validarAusenciaTentativaAtiva(
     pedidoId
   );
 
-
   /**
-   * Validar token.
+   * Token criado pelo
+   * MercadoPago.js / Brick.
    */
 
   if (
     !token ||
-    typeof token !== "string"
+    typeof token !==
+    "string"
   ) {
     throw new Error(
       "Token do cartão não informado."
     );
   }
 
-
   /**
-   * O paymentMethodId vem do SDK
-   * do Mercado Pago.
+   * Bandeira identificada pelo Brick.
    *
-   * Exemplos:
-   *
-   * elo
    * visa
    * master
+   * elo
+   * amex
+   * etc.
    */
 
   if (
     !paymentMethodId ||
-    typeof paymentMethodId !== "string"
+    typeof paymentMethodId !==
+    "string"
   ) {
     throw new Error(
       "Método do cartão não informado."
     );
   }
 
-
-  /**
-   * =====================================
-   * NORMALIZAR PAYMENT METHOD
-   * =====================================
-   *
-   * O Card Payment Brick identifica
-   * o cartão Elo de débito como:
-   *
-   * payment_method_id = "elo"
-   *
-   * Porém a Orders API exige:
-   *
-   * payment_method.id = "debelo"
-   *
-   * quando:
-   *
-   * payment_method.type = "debit_card"
-   */
-
   const paymentMethodIdOrder =
-    tipoMercadoPago === "debit_card" &&
-    paymentMethodId.toLowerCase() === "elo"
-      ? "debelo"
-      : paymentMethodId;
-
-
-  console.log(
-    "PAYMENT METHOD NORMALIZADO:",
-    {
-      metodoLocal,
-      tipoMercadoPago,
-      recebidoDoBrick:
-        paymentMethodId,
-      enviadoParaOrder:
-        paymentMethodIdOrder,
-    }
-  );
-
-
-  /**
-   * Crédito aceita parcelas.
-   * Débito sempre usa 1.
-   */
+    paymentMethodId
+      .trim()
+      .toLowerCase();
 
   const numeroParcelas =
-    permitirParcelas
-      ? Number(
-          installments
-        )
-      : 1;
-
+    Number(
+      installments
+    );
 
   if (
     !Number.isInteger(
@@ -1813,11 +2475,6 @@ async function iniciarPagamentoCartaoViaOrder({
     );
   }
 
-
-  /**
-   * Identificadores internos.
-   */
-
   const referenciaExterna =
     `AUR-${randomUUID()}`;
 
@@ -1829,9 +2486,9 @@ async function iniciarPagamentoCartaoViaOrder({
       2
     );
 
-
   /**
-   * Criar tentativa local.
+   * Criamos a tentativa local
+   * ANTES de chamar o Mercado Pago.
    */
 
   const pagamento =
@@ -1843,7 +2500,7 @@ async function iniciarPagamentoCartaoViaOrder({
         "MERCADO_PAGO",
 
       metodo:
-        metodoLocal,
+        "CREDITO",
 
       status:
         "PROCESSANDO",
@@ -1855,49 +2512,16 @@ async function iniciarPagamentoCartaoViaOrder({
       chaveIdempotencia,
     });
 
+  const payerOrder =
+    montarPayer(
+      pedido,
+      payer
+    );
 
   /**
-   * Dados do comprador.
-   *
-   * Prioridade:
-   *
-   * 1. e-mail recebido pelo checkout
-   * 2. e-mail cadastrado no pedido
-   */
-
-  const payerOrder = {
-    email:
-      payer?.email ||
-      pedido.usuario.email,
-  };
-
-
-  if (
-    payer
-      ?.identification
-      ?.type &&
-    payer
-      ?.identification
-      ?.number
-  ) {
-    payerOrder.identification = {
-      type:
-        payer
-          .identification
-          .type,
-
-      number:
-        payer
-          .identification
-          .number,
-    };
-  }
-
-
-  /**
-   * =====================================
-   * ORDER DO CARTÃO
-   * =====================================
+   * =========================================
+   * PAYLOAD ORDERS API - CRÉDITO
+   * =========================================
    */
 
   const dadosOrder = {
@@ -1913,9 +2537,6 @@ async function iniciarPagamentoCartaoViaOrder({
     processing_mode:
       "automatic",
 
-    payer:
-      payerOrder,
-
     transactions: {
       payments: [
         {
@@ -1927,7 +2548,7 @@ async function iniciarPagamentoCartaoViaOrder({
               paymentMethodIdOrder,
 
             type:
-              tipoMercadoPago,
+              "credit_card",
 
             token,
 
@@ -1937,28 +2558,48 @@ async function iniciarPagamentoCartaoViaOrder({
         },
       ],
     },
+
+    payer:
+      payerOrder,
   };
 
+  /**
+   * Nunca logar o token real.
+   */
+
+  console.log(
+    "INICIANDO PAGAMENTO VIA ORDERS API:",
+    {
+      pedidoId:
+        pedido.id,
+
+      pagamentoId:
+        pagamento.id,
+
+      metodo:
+        "CREDITO",
+
+      paymentMethodId:
+        paymentMethodIdOrder,
+
+      parcelas:
+        numeroParcelas,
+
+      valor,
+
+      referenciaExterna,
+
+      token:
+        "[REMOVIDO]",
+    }
+  );
 
   try {
-    /**
-     * Criar Order.
-     */
-
     const order =
       await criarOrderMercadoPago(
         dadosOrder,
         chaveIdempotencia
       );
-
-
-    /**
-     * Salvar IDs e aplicar status.
-     *
-     * Usamos paymentMethodIdOrder,
-     * pois é o valor efetivamente
-     * enviado ao Mercado Pago.
-     */
 
     return await persistirOrderCartao({
       pagamento,
@@ -1974,24 +2615,19 @@ async function iniciarPagamentoCartaoViaOrder({
         numeroParcelas,
     });
   } catch (erro) {
-    /**
-     * O Mercado Pago pode devolver
-     * uma Order válida dentro da
-     * resposta de erro.
-     *
-     * Isso acontece, por exemplo,
-     * quando um cartão é recusado.
-     */
-
     const orderRetornada =
       obterOrderDeErro(
         erro
       );
 
+    /**
+     * Uma Order recusada pode ainda
+     * existir e possuir ID/status.
+     *
+     * Precisamos persistir isso.
+     */
 
-    if (
-      orderRetornada
-    ) {
+    if (orderRetornada) {
       try {
         return await persistirOrderCartao({
           pagamento,
@@ -2008,40 +2644,22 @@ async function iniciarPagamentoCartaoViaOrder({
             numeroParcelas,
         });
       } catch (
-        erroOrder
+      erroPersistir
       ) {
         console.error(
-          "Erro ao registrar Order retornada:",
-          erroOrder
+          "Erro ao persistir Order de cartão retornada:",
+          erroPersistir
         );
 
-        throw erroOrder;
+        throw erroPersistir;
       }
     }
 
-
-    /**
-     * Sem Order confirmada.
-     *
-     * Pode ser:
-     *
-     * - timeout;
-     * - falha de rede;
-     * - erro de validação;
-     * - indisponibilidade.
-     *
-     * Não marcamos automaticamente
-     * como recusado.
-     */
-
     await registrarFalhaParaReconciliacao(
       pagamento,
-
       erro,
-
-      `Erro ao iniciar pagamento ${metodoLocal.toLowerCase()} via Orders:`
+      "Erro ao iniciar pagamento crédito via Orders:"
     );
-
 
     throw erro;
   }
@@ -2049,65 +2667,37 @@ async function iniciarPagamentoCartaoViaOrder({
 
 /**
  * =========================================
- * CRÉDITO
- * =========================================
- */
-
-export async function iniciarPagamentoCartao(
-  dados,
-  usuarioId
-) {
-  return iniciarPagamentoCartaoViaOrder({
-    dados,
-
-    usuarioId,
-
-    metodoLocal:
-      "CREDITO",
-
-    tipoMercadoPago:
-      "credit_card",
-
-    permitirParcelas:
-      true,
-  });
-}
-
-
-/**
- * =========================================
  * DÉBITO
  * =========================================
+ *
+ * Removido do checkout.
+ *
+ * Este export fica temporariamente para
+ * não quebrar imports antigos.
  */
 
-export async function iniciarPagamentoDebito(
-  dados,
-  usuarioId
-) {
-  return iniciarPagamentoCartaoViaOrder({
-    dados,
+export async function iniciarPagamentoDebito() {
+  const erro =
+    new Error(
+      "Pagamento com cartão de débito não está disponível."
+    );
 
-    usuarioId,
+  erro.status =
+    400;
 
-    metodoLocal:
-      "DEBITO",
-
-    tipoMercadoPago:
-      "debit_card",
-
-    permitirParcelas:
-      false,
-  });
+  throw erro;
 }
-
 
 /**
  * =========================================
- * RECONCILIAÇÃO FRONTEND
+ * RECONCILIAÇÃO
  * =========================================
  *
- * Todos os pagamentos novos agora usam
- * provedorOrdemId.
+ * Agora usamos:
+ *
+ * provedorOrdemId
+ *
+ * GET /v1/orders/{id}
  */
 
 export async function reconciliarPagamento(
@@ -2131,44 +2721,30 @@ export async function reconciliarPagamento(
       },
     });
 
-
   if (!pagamento) {
     throw new Error(
       "Pagamento não encontrado."
     );
   }
 
-
   if (
-    !pagamento
-      .provedorOrdemId
+    !pagamento.provedorOrdemId
   ) {
     throw new Error(
       "O pagamento ainda não possui uma Order no Mercado Pago."
     );
   }
 
-
-  /**
-   * Consultar diretamente no MP.
-   */
-
   const order =
     await consultarOrderMercadoPago(
       pagamento.provedorOrdemId
     );
-
-
-  /**
-   * Aplicar estado recebido.
-   */
 
   const resultado =
     await aplicarOrderAoPagamento(
       pagamento,
       order
     );
-
 
   return {
     pagamentoId:
@@ -2182,29 +2758,121 @@ export async function reconciliarPagamento(
   };
 }
 
+/**
+ * =========================================
+ * WEBHOOK - ORDER
+ * =========================================
+ */
+
+export async function reconciliarPagamentoPorOrderId(
+  orderId
+) {
+  if (!orderId) {
+    throw new Error(
+      "ID da Order não informado."
+    );
+  }
+
+  /**
+   * Não confiamos no conteúdo do webhook.
+   *
+   * Consultamos novamente o Mercado Pago.
+   */
+
+  const order =
+    await consultarOrderMercadoPago(
+      String(
+        orderId
+      )
+    );
+
+  /**
+   * Caminho principal:
+   *
+   * localizar pela Order.
+   */
+
+  let pagamento =
+    await prisma.pagamento.findFirst({
+      where: {
+        provedorOrdemId:
+          String(
+            orderId
+          ),
+      },
+
+      include: {
+        pedido:
+          true,
+      },
+    });
+
+  /**
+   * Existe uma pequena janela:
+   *
+   * 1. Mercado Pago cria Order
+   * 2. webhook chega
+   * 3. aplicação ainda não salvou order.id
+   *
+   * Nesse caso usamos external_reference.
+   */
+
+  if (
+    !pagamento &&
+    order?.external_reference
+  ) {
+    pagamento =
+      await prisma.pagamento.findFirst({
+        where: {
+          referenciaExterna:
+            order.external_reference,
+        },
+
+        include: {
+          pedido:
+            true,
+        },
+      });
+  }
+
+  if (!pagamento) {
+    throw new Error(
+      "Pagamento não encontrado para esta Order."
+    );
+  }
+
+  const resultado =
+    await aplicarOrderAoPagamento(
+      pagamento,
+      order
+    );
+
+  return resultado.pagamento;
+}
 
 /**
  * =========================================
  * COMPATIBILIDADE TEMPORÁRIA
  * =========================================
  *
- * Seu controller antigo ainda pode importar
+ * Nosso webhook antigo ainda pode importar
  * esta função.
  *
- * Porém ela NÃO consulta mais:
- *
- * /v1/payments
- *
- * Quando alterarmos o controller,
- * essa função poderá ser removida.
+ * Depois que atualizarmos controller/webhook,
+ * ela pode ser removida.
  */
 
 export async function reconciliarPagamentoPorPaymentId() {
-  throw new Error(
-    "A Payments API foi desativada neste projeto. Utilize reconciliação por Order ID."
-  );
-}
+  const erro =
+    new Error(
+      "A integração agora utiliza Orders API. O webhook deve reconciliar pelo Order ID."
+    );
 
+  erro.status =
+    400;
+
+  throw erro;
+}
 
 /**
  * =========================================
@@ -2232,109 +2900,50 @@ export async function buscarUltimoPagamentoPedido(
       },
     });
 
-
   if (!pagamento) {
     return null;
   }
 
-
   const detalhes =
     pagamento.detalhes &&
-    typeof pagamento.detalhes ===
+      typeof pagamento.detalhes ===
       "object"
       ? pagamento.detalhes
       : {};
 
-
   /**
-   * =====================================
    * PIX
-   * =====================================
    */
-
-  const pixSalvo =
-    detalhes.pix;
-
-
-  /**
-   * Compatibilidade com estrutura
-   * salva anteriormente.
-   */
-
-  const transacaoAntiga =
-    detalhes
-      .transactions
-      ?.payments
-      ?.[0];
-
-
-  const metodoPagamentoAntigo =
-    transacaoAntiga
-      ?.payment_method;
-
 
   const pix =
-    pixSalvo?.codigo
+    pagamento.metodo === "PIX" &&
+      detalhes.pix?.codigo
       ? {
-          codigo:
-            pixSalvo.codigo,
+        codigo:
+          detalhes.pix.codigo,
 
-          imagemBase64:
-            pixSalvo
-              .imagemBase64 ||
-            null,
+        imagemBase64:
+          detalhes.pix
+            .imagemBase64 ||
+          null,
 
-          linkPagamento:
-            pixSalvo
-              .linkPagamento ||
-            null,
-        }
-
-      : metodoPagamentoAntigo
-          ?.qr_code
-
-        ? {
-            codigo:
-              metodoPagamentoAntigo
-                .qr_code,
-
-            imagemBase64:
-              metodoPagamentoAntigo
-                .qr_code_base64 ||
-              null,
-
-            linkPagamento:
-              metodoPagamentoAntigo
-                .ticket_url ||
-              null,
-          }
-
-        : null;
-
+        linkPagamento:
+          detalhes.pix
+            .linkPagamento ||
+          null,
+      }
+      : null;
 
   /**
-   * =====================================
-   * CARTÃO
-   * =====================================
+   * CRÉDITO
    */
 
-  let cartao =
-    null;
-
-
-  if (
-    [
-      "CREDITO",
-      "DEBITO",
-    ].includes(
-      pagamento.metodo
-    ) &&
-    detalhes.cartao
-  ) {
-    cartao =
-      detalhes.cartao;
-  }
-
+  const cartao =
+    pagamento.metodo ===
+      "CREDITO" &&
+      detalhes.cartao
+      ? detalhes.cartao
+      : null;
 
   return {
     pagamentoId:
@@ -2355,100 +2964,28 @@ export async function buscarUltimoPagamentoPedido(
   };
 }
 
-
 /**
  * =========================================
- * WEBHOOK - ORDER ID
+ * MÉTODOS DE DÉBITO
  * =========================================
  *
- * O webhook informa o ID da Order.
- *
- * Nunca confiamos diretamente no status
- * recebido no webhook.
- *
- * Consultamos a Order novamente no
- * Mercado Pago.
- */
-
-export async function reconciliarPagamentoPorOrderId(
-  orderId
-) {
-  if (!orderId) {
-    throw new Error(
-      "ID da Order não informado."
-    );
-  }
-
-
-  /**
-   * Buscar pagamento local.
-   */
-
-  const pagamento =
-    await prisma.pagamento.findFirst({
-      where: {
-        provedorOrdemId:
-          String(
-            orderId
-          ),
-      },
-
-      include: {
-        pedido:
-          true,
-      },
-    });
-
-
-  if (!pagamento) {
-    throw new Error(
-      "Pagamento não encontrado para esta Order."
-    );
-  }
-
-
-  /**
-   * Consultar estado atual
-   * diretamente no Mercado Pago.
-   */
-
-  const order =
-    await consultarOrderMercadoPago(
-      String(
-        orderId
-      )
-    );
-
-
-  /**
-   * Aplicar status.
-   */
-
-  const resultado =
-    await aplicarOrderAoPagamento(
-      pagamento,
-      order
-    );
-
-
-  return resultado.pagamento;
-}
-
-
-/**
- * =========================================
- * TESTAR MÉTODOS DE DÉBITO
- * =========================================
- *
- * Consulta os meios de débito disponíveis
- * para a MESMA aplicação utilizada
- * pelas Orders.
+ * Mantido temporariamente para não quebrar
+ * alguma rota de diagnóstico antiga.
  */
 
 export async function testarMetodosDebitoMercadoPago() {
+  return [];
+}
+
+/**
+ * =========================================
+ * LISTAR MÉTODOS DE PAGAMENTO
+ * =========================================
+ */
+
+export async function listarMetodosPagamentoMercadoPago() {
   const accessToken =
     obterAccessToken();
-
 
   const resposta =
     await fetch(
@@ -2462,108 +2999,6 @@ export async function testarMetodosDebitoMercadoPago() {
             `Bearer ${accessToken}`,
 
           Accept:
-            "application/json",
-        },
-      }
-    );
-
-
-  const dados =
-    await lerRespostaJson(
-      resposta
-    );
-
-
-  if (!resposta.ok) {
-    throw criarErroMercadoPago(
-      resposta,
-
-      dados,
-
-      "Não foi possível consultar os meios de pagamento."
-    );
-  }
-
-
-  const metodosDebito =
-    Array.isArray(dados)
-      ? dados
-          .filter(
-            (metodo) =>
-              metodo
-                .payment_type_id ===
-              "debit_card"
-          )
-
-          .map(
-            (metodo) => ({
-              id:
-                metodo.id,
-
-              nome:
-                metodo.name,
-
-              tipo:
-                metodo.payment_type_id,
-
-              status:
-                metodo.status,
-
-              minAllowedAmount:
-                metodo
-                  .min_allowed_amount,
-
-              maxAllowedAmount:
-                metodo
-                  .max_allowed_amount,
-
-              settings:
-                metodo.settings,
-            })
-          )
-
-      : [];
-
-
-  console.log(
-    "======================================"
-  );
-
-  console.log(
-    "MÉTODOS DE DÉBITO DISPONÍVEIS:"
-  );
-
-  console.dir(
-    metodosDebito,
-    {
-      depth:
-        null,
-    }
-  );
-
-  console.log(
-    "======================================"
-  );
-
-
-  return metodosDebito;
-}
-
-export async function listarMetodosPagamentoMercadoPago() {
-  const accessToken =
-    obterAccessToken();
-
-  const resposta =
-    await fetch(
-      `${MERCADO_PAGO_API}/v1/payment_methods`,
-      {
-        method: "GET",
-
-        headers: {
-          Authorization:
-            `Bearer ${accessToken}`,
-
-          "Content-Type":
             "application/json",
         },
       }
@@ -2587,13 +3022,203 @@ export async function listarMetodosPagamentoMercadoPago() {
     );
   }
 
-  console.dir(
-    resultado,
+  return resultado;
+}
+
+function obterChaveIdempotenciaReembolso(
+  pagamento
+) {
+  return `refund-${pagamento.id}`;
+}
+
+async function processarReembolsoPagamentoTardio(
+  pagamento,
+  pedido
+) {
+  /**
+   * =========================================
+   * VALIDAÇÕES
+   * =========================================
+   */
+
+  if (!pagamento) {
+    throw new Error(
+      "Pagamento não informado para reembolso."
+    );
+  }
+
+
+  if (!pedido) {
+    throw new Error(
+      "Pedido não informado para reembolso."
+    );
+  }
+
+
+  /**
+   * Só fazemos isso para pedido CANCELADO.
+   */
+
+  if (
+    pedido.status !==
+    "CANCELADO"
+  ) {
+    return {
+      solicitado:
+        false,
+
+      motivo:
+        "PEDIDO_NAO_CANCELADO",
+    };
+  }
+
+
+  /**
+   * O Mercado Pago precisa ter realmente
+   * aprovado o pagamento.
+   */
+
+  if (
+    pagamento.status !==
+    "APROVADO"
+  ) {
+    return {
+      solicitado:
+        false,
+
+      motivo:
+        "PAGAMENTO_NAO_APROVADO",
+    };
+  }
+
+
+  if (
+    !pagamento.provedorOrdemId
+  ) {
+    throw new Error(
+      "Pagamento tardio não possui Order para reembolso."
+    );
+  }
+
+
+  const detalhes =
+    pagamento.detalhes &&
+    typeof pagamento.detalhes ===
+      "object"
+      ? pagamento.detalhes
+      : {};
+
+
+  /**
+   * Segurança adicional:
+   *
+   * só reembolsamos automaticamente se nossa
+   * proteção marcou explicitamente como
+   * pagamento tardio.
+   */
+
+  if (
+    detalhes
+      ?.pagamentoTardio
+      ?.detectado !== true
+  ) {
+    return {
+      solicitado:
+        false,
+
+      motivo:
+        "NAO_E_PAGAMENTO_TARDIO",
+    };
+  }
+
+
+  /**
+   * Se nosso banco já sabe que foi
+   * reembolsado, acabou.
+   */
+
+  if (
+    pagamento.status ===
+    "REEMBOLSADO"
+  ) {
+    return {
+      solicitado:
+        false,
+
+      motivo:
+        "JA_REEMBOLSADO",
+    };
+  }
+
+
+  const chaveIdempotencia =
+    obterChaveIdempotenciaReembolso(
+      pagamento
+    );
+
+
+  /**
+   * =========================================
+   * SOLICITAR REEMBOLSO
+   * =========================================
+   */
+
+  const order =
+    await reembolsarOrderMercadoPago(
+      pagamento.provedorOrdemId,
+      chaveIdempotencia
+    );
+
+
+  /**
+   * Não inventamos o status local.
+   *
+   * Aplicamos novamente a Order devolvida
+   * pelo Mercado Pago.
+   */
+
+  const pagamentoAtual =
+    await prisma.pagamento.findUnique({
+      where: {
+        id:
+          pagamento.id,
+      },
+
+      include: {
+        pedido:
+          true,
+      },
+    });
+
+
+  if (!pagamentoAtual) {
+    throw new Error(
+      "Pagamento não encontrado após solicitar reembolso."
+    );
+  }
+
+
+  const resultado =
+  await aplicarOrderAoPagamento(
+    pagamentoAtual,
+    order,
     {
-      depth: null,
-      colors: true,
+      permitirReembolsoAutomatico:
+        false,
     }
   );
 
-  return resultado;
+
+  return {
+    solicitado:
+      true,
+
+    pagamento:
+      resultado.pagamento,
+
+    pedido:
+      resultado.pedido,
+
+    order,
+  };
 }

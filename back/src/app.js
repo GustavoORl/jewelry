@@ -9,11 +9,14 @@ import produtoPublicoRoutes from "./routes/public/produtoRoutes.js";
 import categoriaPublicaRoutes from "./routes/public/categoriaRoutes.js";
 import materialPublicoRoutes from "./routes/public/materialRoutes.js";
 import webhookRoutes from "./routes/public/webhookRoutes.js"
+import usuarioPublicoRoutes from "./routes/public/usuarioRoutes.js";
 
 import sacolaUserRoutes from "./routes/user/sacolaRoutes.js"
 import pedidoUserRoutes from "./routes/user/pedidoRoutes.js"
 import favoritoUserRoutes from "./routes/user/favoritoRoutes.js"
 import pagamentoUserRoutes from "./routes/user/pagamentoRoutes.js";
+import enderecoRoutes from "./routes/user/enderecoRoutes.js";
+import usuarioUserRoutes from "./routes/user/usuarioRoutes.js";
 
 import adminRoutes from "./routes/admin/index.js";
 
@@ -49,15 +52,18 @@ app.get("/health", (req, res) => {
 
 // Rotas públicas
 app.use("/", authRoutes);
+app.use("/usuario", usuarioPublicoRoutes);
 app.use("/produtos", produtoPublicoRoutes);
 app.use("/categorias", categoriaPublicaRoutes);
 app.use("/materiais", materialPublicoRoutes);
 
 // Rotas Usuários logados
+app.use("/usuario", usuarioUserRoutes);
 app.use("/sacola",sacolaUserRoutes);
 app.use("/pedidos", pedidoUserRoutes);
 app.use("/favoritos", favoritoUserRoutes);
 app.use("/pagamentos", pagamentoUserRoutes);
+app.use("/enderecos", enderecoRoutes);
 
 // Rotas administrativas
 app.use("/admin", adminRoutes);

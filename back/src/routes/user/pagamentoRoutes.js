@@ -3,15 +3,13 @@ import { Router } from "express";
 import {
   criarPagamentoPix,
   criarPagamentoCartao,
-  criarPagamentoDebito,
   consultarPagamento,
   recuperarPagamentoPedido,
   diagnosticarIntegracaoMercadoPago,
 } from "../../controllers/pagamentos/pagamentoController.js";
 
 import {
-  testarMetodosDebitoMercadoPago,
-  listarMetodosPagamentoMercadoPago
+  listarMetodosPagamentoMercadoPago,
 } from "../../services/pagamentoService.js";
 
 import {
@@ -29,8 +27,16 @@ const router = Router();
  *
  * POST /pagamentos/pix
  *
- * Cria uma Order no Mercado Pago
- * utilizando Pix.
+ * Cria uma Order no Mercado Pago:
+ *
+ * POST /v1/orders
+ *
+ * processing_mode = automatic
+ *
+ * payment_method:
+ *
+ * id   = pix
+ * type = bank_transfer
  */
 
 router.post(
@@ -47,9 +53,24 @@ router.post(
  *
  * POST /pagamentos/cartao
  *
- * Cria uma Order utilizando:
+ * Cria uma Order no Mercado Pago:
  *
- * payment_method.type = credit_card
+ * POST /v1/orders
+ *
+ * processing_mode = automatic
+ *
+ * O token do cartão é gerado no frontend
+ * pelo MercadoPago.js / Card Payment Brick.
+ *
+ * O backend recebe:
+ *
+ * - pedidoId
+ * - token
+ * - paymentMethodId
+ * - installments
+ * - payer
+ *
+ * e cria a transação dentro da Order.
  */
 
 router.post(
@@ -61,33 +82,26 @@ router.post(
 
 /**
  * =========================================
- * CRIAR PAGAMENTO COM DÉBITO
- * =========================================
- *
- * POST /pagamentos/debito
- *
- * Agora também utiliza:
- *
- * POST /v1/orders
- *
- * com:
- *
- * payment_method.type = debit_card
- */
-
-router.post(
-  "/debito",
-  autenticar,
-  criarPagamentoDebito
-);
-
-
-/**
- * =========================================
  * RECUPERAR ÚLTIMO PAGAMENTO DO PEDIDO
  * =========================================
  *
  * GET /pagamentos/pedido/:pedidoId
+ *
+ * Recupera o pagamento local mais recente
+ * associado ao pedido.
+ *
+ * Pode retornar informações de:
+ *
+ * - PIX
+ * - CREDITO
+ *
+ * Essa rota é útil quando:
+ *
+ * - a página é recarregada;
+ * - o usuário retorna ao checkout;
+ * - precisamos recuperar o QR Code Pix;
+ * - precisamos verificar o último status
+ *   conhecido localmente.
  */
 
 router.get(
@@ -104,8 +118,17 @@ router.get(
  *
  * GET /pagamentos/diagnostico/mercado-pago
  *
- * Utiliza a mesma aplicação/Access Token
- * responsável pelas Orders.
+ * Utiliza:
+ *
+ * MERCADO_PAGO_ACCESS_TOKEN
+ *
+ * da aplicação utilizada pelos pagamentos:
+ *
+ * - PIX
+ * - crédito
+ *
+ * Os pagamentos são processados
+ * através da Orders API.
  */
 
 router.get(
@@ -114,55 +137,27 @@ router.get(
   diagnosticarIntegracaoMercadoPago
 );
 
-router.get(
-  "/debug/metodos-pagamento",
-  autenticar,
-  async (req, res) => {
-    try {
-      const metodos =
-        await listarMetodosPagamentoMercadoPago();
-
-      return res.json({
-        sucesso: true,
-        metodos,
-      });
-    } catch (erro) {
-      console.error(
-        "Erro ao consultar métodos:",
-        erro
-      );
-
-      return res
-        .status(erro.status || 500)
-        .json({
-          sucesso: false,
-          mensagem:
-            erro.message,
-          detalhes:
-            erro.detalhes || null,
-        });
-    }
-  }
-);
 
 /**
  * =========================================
- * DEBUG - MÉTODOS DE DÉBITO
+ * DEBUG - MÉTODOS DE PAGAMENTO
  * =========================================
  *
- * GET /pagamentos/debug/metodos-debito
+ * GET /pagamentos/debug/metodos-pagamento
  *
- * IMPORTANTE:
+ * Consulta:
  *
- * Esta rota precisa ficar ANTES de /:id,
- * caso contrário o Express pode interpretar
- * "debug" como sendo o parâmetro :id.
+ * GET /v1/payment_methods
  *
- * Também protegemos a rota com autenticação.
+ * Esta rota não cria pagamentos.
+ *
+ * Ela existe apenas para diagnóstico e
+ * permite verificar os métodos disponíveis
+ * para as credenciais atuais.
  */
 
 router.get(
-  "/debug/metodos-debito",
+  "/debug/metodos-pagamento",
   autenticar,
   async (
     req,
@@ -170,8 +165,7 @@ router.get(
   ) => {
     try {
       const metodos =
-        await testarMetodosDebitoMercadoPago();
-
+        await listarMetodosPagamentoMercadoPago();
 
       return res
         .status(200)
@@ -179,23 +173,20 @@ router.get(
           sucesso:
             true,
 
-          quantidade:
-            metodos.length,
-
           metodos,
         });
     } catch (
       erro
     ) {
       console.error(
-        "Erro ao consultar métodos de débito:",
+        "Erro ao consultar métodos de pagamento:",
         erro
       );
 
-
       return res
         .status(
-          erro.status || 500
+          erro.status ||
+          500
         )
         .json({
           sucesso:
@@ -203,10 +194,14 @@ router.get(
 
           mensagem:
             erro.message ||
-            "Não foi possível consultar os métodos de débito.",
+            "Não foi possível consultar os métodos de pagamento.",
 
           statusMercadoPago:
             erro.status ||
+            null,
+
+          detalhes:
+            erro.detalhes ||
             null,
         });
     }
@@ -221,15 +216,32 @@ router.get(
  *
  * GET /pagamentos/:id
  *
- * :id é o ID LOCAL da tabela Pagamento.
+ * IMPORTANTE:
  *
- * O service utiliza:
+ * :id continua sendo o ID LOCAL
+ * da tabela Pagamento.
  *
- * pagamento.provedorOrdemId
+ * O frontend NÃO precisa conhecer
+ * diretamente o ID da Order.
  *
- * para consultar:
+ * Fluxo:
  *
+ * pagamento.id
+ *      ↓
+ * buscar Pagamento local
+ *      ↓
+ * provedorOrdemId
+ *      ↓
  * GET /v1/orders/{orderId}
+ *      ↓
+ * Mercado Pago
+ *      ↓
+ * interpretar status da Order
+ *      ↓
+ * atualizar Pagamento local
+ *      ↓
+ * se aprovado:
+ * Pedido -> PAGO
  */
 
 router.get(

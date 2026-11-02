@@ -5,6 +5,8 @@ import {
   criarUsuario,
   listarUsuarios,
   buscarUsuarioPorId,
+  atualizarPerfilUsuario,
+  alterarSenhaUsuario,
 } from "../../services/usuarioService.js";
 
 export async function cadastrarUsuario(req, res) {
@@ -83,6 +85,165 @@ export async function obterUsuarioPorId(req, res) {
     return res.status(500).json({
       sucesso: false,
       mensagem: "Erro ao consultar usuário.",
+    });
+  }
+}
+
+
+export async function atualizarMeuPerfil(
+  req,
+  res
+) {
+  try {
+    const usuario =
+      await atualizarPerfilUsuario(
+        req.usuario.id,
+        req.body
+      );
+
+
+    return res.status(200).json({
+      sucesso: true,
+
+      mensagem:
+        "Dados atualizados com sucesso.",
+
+      usuario,
+    });
+  } catch (erro) {
+    if (
+      erro instanceof
+      ZodError
+    ) {
+      return res.status(400).json({
+        sucesso: false,
+
+        mensagem:
+          "Dados inválidos.",
+
+        erros:
+          erro.issues,
+      });
+    }
+
+
+    if (
+      erro instanceof
+        Prisma.PrismaClientKnownRequestError &&
+      erro.code ===
+        "P2002"
+    ) {
+      return res.status(409).json({
+        sucesso: false,
+
+        mensagem:
+          "Este e-mail já está sendo utilizado.",
+      });
+    }
+
+
+    console.error(
+      "Erro ao atualizar perfil:",
+      erro
+    );
+
+
+    return res.status(500).json({
+      sucesso: false,
+
+      mensagem:
+        "Não foi possível atualizar seus dados.",
+    });
+  }
+}
+
+
+export async function alterarMinhaSenha(
+  req,
+  res
+) {
+  try {
+    await alterarSenhaUsuario(
+      req.usuario.id,
+      req.body
+    );
+
+
+    return res.status(200).json({
+      sucesso: true,
+
+      mensagem:
+        "Senha alterada com sucesso.",
+    });
+  } catch (erro) {
+    if (
+      erro instanceof
+      ZodError
+    ) {
+      return res.status(400).json({
+        sucesso: false,
+
+        mensagem:
+          erro.issues?.[0]
+            ?.message ||
+          "Dados inválidos.",
+
+        erros:
+          erro.issues,
+      });
+    }
+
+
+    if (
+      erro.message ===
+      "SENHA_ATUAL_INCORRETA"
+    ) {
+      return res.status(400).json({
+        sucesso: false,
+
+        mensagem:
+          "A senha atual está incorreta.",
+      });
+    }
+
+
+    if (
+      erro.message ===
+      "NOVA_SENHA_IGUAL_ATUAL"
+    ) {
+      return res.status(400).json({
+        sucesso: false,
+
+        mensagem:
+          "A nova senha deve ser diferente da senha atual.",
+      });
+    }
+
+
+    if (
+      erro.message ===
+      "USUARIO_NAO_ENCONTRADO"
+    ) {
+      return res.status(404).json({
+        sucesso: false,
+
+        mensagem:
+          "Usuário não encontrado.",
+      });
+    }
+
+
+    console.error(
+      "Erro ao alterar senha:",
+      erro
+    );
+
+
+    return res.status(500).json({
+      sucesso: false,
+
+      mensagem:
+        "Não foi possível alterar sua senha.",
     });
   }
 }

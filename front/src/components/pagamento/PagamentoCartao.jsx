@@ -1,4 +1,8 @@
-import { useState } from "react";
+import {
+  useCallback,
+  useMemo,
+  useState,
+} from "react";
 
 import {
   CardPayment,
@@ -6,8 +10,6 @@ import {
 } from "@mercadopago/sdk-react";
 
 import {
-  CreditCard,
-  Landmark,
   LoaderCircle,
   ShieldCheck,
 } from "lucide-react";
@@ -17,17 +19,44 @@ import {
 } from "../../services/api.js";
 
 
+/**
+ * =========================================
+ * MERCADO PAGO
+ * =========================================
+ *
+ * O frontend utiliza o MercadoPago.js
+ * para gerar o token do cartão.
+ *
+ * O backend utiliza esse token para criar
+ * uma Order através da Orders API.
+ *
+ * Fluxo:
+ *
+ * Card Payment Brick
+ *        ↓
+ * token do cartão
+ *        ↓
+ * POST /pagamentos/cartao
+ *        ↓
+ * backend
+ *        ↓
+ * POST /v1/orders
+ */
+
 const PUBLIC_KEY =
   import.meta.env
     .VITE_MERCADO_PAGO_PUBLIC_KEY;
 
 
+/**
+ * Inicializamos o SDK apenas uma vez.
+ */
+
 if (PUBLIC_KEY) {
   initMercadoPago(
     PUBLIC_KEY,
     {
-      locale:
-        "pt-BR",
+      locale: "pt-BR",
     }
   );
 }
@@ -45,201 +74,488 @@ export default function PagamentoCartao({
    */
 
   const [
-    tipoPagamento,
-    setTipoPagamento,
-  ] = useState(
-    "credito"
-  );
-
-  const [
     pronto,
     setPronto,
-  ] = useState(
-    false
-  );
+  ] = useState(false);
 
   const [
     processando,
     setProcessando,
-  ] = useState(
-    false
-  );
+  ] = useState(false);
 
   const [
     erro,
     setErro,
-  ] = useState(
-    ""
-  );
+  ] = useState("");
 
 
   /**
    * =========================================
-   * ALTERAR CRÉDITO / DÉBITO
+   * INITIALIZATION
    * =========================================
-   *
-   * Quando o usuário troca o tipo,
-   * o Brick será recriado através
-   * da propriedade "key".
    */
 
-  function alterarTipoPagamento(
-    tipo
-  ) {
-    if (
-      processando ||
-      tipo === tipoPagamento
-    ) {
-      return;
-    }
-
-
-    setTipoPagamento(
-      tipo
+  const initialization =
+    useMemo(
+      () => ({
+        amount:
+          Number(valor),
+      }),
+      [valor]
     );
 
-    setErro(
-      ""
+
+  /**
+   * =========================================
+   * CUSTOMIZAÇÃO
+   * =========================================
+   *
+   * Nosso checkout aceita somente
+   * cartão de crédito.
+   *
+   * Por isso removemos:
+   *
+   * - debit_card
+   * - prepaid_card
+   *
+   * O Card Payment Brick continua
+   * responsável por identificar:
+   *
+   * - bandeira;
+   * - token;
+   * - parcelas;
+   * - dados do pagador.
+   */
+
+  const customization =
+    useMemo(
+      () => ({
+        paymentMethods: {
+          minInstallments: 1,
+
+          types: {
+            excluded: [
+              "debit_card",
+              "prepaid_card",
+            ],
+          },
+        },
+
+        visual: {
+          style: {
+            theme:
+              "default",
+          },
+        },
+      }),
+      []
     );
 
-    setPronto(
-      false
+
+  /**
+   * =========================================
+   * BRICK READY
+   * =========================================
+   */
+
+  const handleReady =
+    useCallback(() => {
+      setPronto(true);
+
+      setErro("");
+    }, []);
+
+
+  /**
+   * =========================================
+   * BRICK ERROR
+   * =========================================
+   */
+
+  const handleError =
+    useCallback(
+      (error) => {
+        console.error(
+          "Erro no Card Payment Brick:",
+          error
+        );
+
+        if (
+          error?.cause ===
+          "missing_payment_information"
+        ) {
+          setErro(
+            "Este cartão não está disponível para pagamento com crédito."
+          );
+
+          return;
+        }
+
+        if (
+          error?.cause ===
+          "card_payment_brick_initialization_failed"
+        ) {
+          setErro(
+            error?.message ||
+              "Não foi possível carregar o pagamento com cartão."
+          );
+
+          return;
+        }
+
+        setErro(
+          "Não foi possível carregar ou processar os dados do cartão."
+        );
+      },
+      []
     );
-  }
 
 
   /**
    * =========================================
    * ENVIAR PAGAMENTO
    * =========================================
+   *
+   * O Card Payment Brick gera:
+   *
+   * - token
+   * - payment_method_id
+   * - paymentTypeId
+   * - installments
+   * - payer
+   *
+   * O frontend envia esses dados para
+   * nosso backend.
+   *
+   * O backend então cria:
+   *
+   * POST /v1/orders
+   *
+   * Nunca enviamos o número completo
+   * do cartão ou CVV ao nosso backend.
    */
 
-  async function enviarPagamento(
-    formData,
-    additionalData
-  ) {
-    setErro("");
-    setProcessando(true);
-
-    try {
-      console.log(
-        "CARD PAYMENT - FORM DATA:",
-        formData
-      );
-
-      console.log(
-        "CARD PAYMENT - ADDITIONAL DATA:",
+  const enviarPagamento =
+    useCallback(
+      async (
+        formData,
         additionalData
-      );
+      ) => {
+        setErro("");
 
-      if (!formData?.token) {
-        throw new Error(
-          "Não foi possível gerar o token do cartão."
-        );
-      }
+        setProcessando(true);
 
-      if (!formData?.payment_method_id) {
-        throw new Error(
-          "Não foi possível identificar o método do cartão."
-        );
-      }
+        try {
+          /**
+           * =================================
+           * LOG SEGURO
+           * =================================
+           *
+           * Não logamos formData inteiro,
+           * pois contém o token do cartão.
+           */
 
-      const dadosPagamento = {
-        pedidoId,
+          console.log(
+            "CARD PAYMENT:",
+            {
+              paymentMethodId:
+                formData
+                  ?.payment_method_id,
 
-        token:
-          formData.token,
+              paymentTypeId:
+                additionalData
+                  ?.paymentTypeId,
 
-        paymentMethodId:
-          formData.payment_method_id,
+              installments:
+                formData
+                  ?.installments,
 
-        payer: {
-          email:
-            formData.payer?.email,
-
-          identification:
-            formData.payer?.identification,
-        },
-      };
-
-      if (
-        tipoPagamento ===
-        "credito"
-      ) {
-        dadosPagamento.installments =
-          Number(
-            formData.installments
+              possuiToken:
+                Boolean(
+                  formData?.token
+                ),
+            }
           );
-      }
 
-      const endpoint =
-        tipoPagamento === "debito"
-          ? "/pagamentos/debito"
-          : "/pagamentos/cartao";
 
-      console.log(
-        "PAGAMENTO ENVIADO:",
-        {
-          tipoSelecionado:
-            tipoPagamento,
+          /**
+           * =================================
+           * TOKEN
+           * =================================
+           */
 
-          paymentMethodId:
-            formData.payment_method_id,
-
-          paymentTypeIdBrick:
-            additionalData?.paymentTypeId,
-
-          endpoint,
-        }
-      );
-
-      const resposta =
-        await apiFetch(
-          endpoint,
-          {
-            method: "POST",
-
-            body:
-              JSON.stringify(
-                dadosPagamento
-              ),
+          if (
+            !formData?.token
+          ) {
+            throw new Error(
+              "Não foi possível gerar o token do cartão."
+            );
           }
-        );
 
-      if (
-        !resposta
-          ?.pagamento
-          ?.pagamentoId
-      ) {
-        throw new Error(
-          "A API não retornou os dados esperados do pagamento."
-        );
-      }
 
-      onPagamentoCriado?.(
-        resposta.pagamento
-      );
+          /**
+           * =================================
+           * PAYMENT METHOD
+           * =================================
+           *
+           * Exemplos:
+           *
+           * visa
+           * master
+           * elo
+           * amex
+           */
 
-      return resposta;
-    } catch (error) {
-      console.error(
-        `Erro no pagamento com ${tipoPagamento === "debito"
-          ? "débito"
-          : "crédito"
-        }:`,
-        error
-      );
+          if (
+            !formData
+              ?.payment_method_id
+          ) {
+            throw new Error(
+              "Não foi possível identificar o método do cartão."
+            );
+          }
 
-      setErro(
-        error.message ||
-        "Não foi possível processar o pagamento."
-      );
 
-      throw error;
-    } finally {
-      setProcessando(false);
-    }
-  }
+          /**
+           * =================================
+           * PAYMENT TYPE
+           * =================================
+           *
+           * Apesar de o Brick estar
+           * configurado para excluir débito,
+           * ainda validamos o tipo retornado
+           * pelo próprio Mercado Pago.
+           */
+
+          const paymentTypeId =
+            additionalData
+              ?.paymentTypeId;
+
+
+          if (
+            !paymentTypeId
+          ) {
+            throw new Error(
+              "Não foi possível identificar o tipo do cartão."
+            );
+          }
+
+
+          /**
+           * =================================
+           * SOMENTE CRÉDITO
+           * =================================
+           */
+
+          if (
+            paymentTypeId !==
+            "credit_card"
+          ) {
+            console.warn(
+              "Pagamento bloqueado: cartão não identificado como crédito.",
+              {
+                paymentMethodId:
+                  formData
+                    .payment_method_id,
+
+                paymentTypeId,
+              }
+            );
+
+            throw new Error(
+              "O cartão informado não foi identificado como cartão de crédito. Utilize um cartão compatível com crédito."
+            );
+          }
+
+
+          /**
+           * =================================
+           * PARCELAS
+           * =================================
+           */
+
+          const parcelas =
+            Number(
+              formData
+                .installments
+            );
+
+          if (
+            !Number.isInteger(
+              parcelas
+            ) ||
+            parcelas < 1
+          ) {
+            throw new Error(
+              "Quantidade de parcelas inválida."
+            );
+          }
+
+
+          /**
+           * =================================
+           * PAYLOAD DO NOSSO BACKEND
+           * =================================
+           *
+           * Esse NÃO é o payload enviado
+           * diretamente ao Mercado Pago.
+           *
+           * O pagamentoService.js transforma
+           * estes dados no payload da
+           * Orders API.
+           */
+
+          const dadosPagamento = {
+            pedidoId,
+
+            token:
+              formData.token,
+
+            paymentMethodId:
+              formData
+                .payment_method_id,
+
+            installments:
+              parcelas,
+
+            payer: {
+              email:
+                formData
+                  .payer
+                  ?.email,
+
+              identification: {
+                type:
+                  formData
+                    .payer
+                    ?.identification
+                    ?.type,
+
+                number:
+                  formData
+                    .payer
+                    ?.identification
+                    ?.number,
+              },
+            },
+          };
+
+
+          /**
+           * =================================
+           * LOG DO PAYLOAD
+           * =================================
+           *
+           * Não exibimos o token.
+           */
+
+          console.log(
+            "PAGAMENTO ENVIADO:",
+            {
+              pedidoId,
+
+              paymentMethodId:
+                dadosPagamento
+                  .paymentMethodId,
+
+              paymentTypeId,
+
+              installments:
+                dadosPagamento
+                  .installments,
+
+              possuiToken:
+                true,
+            }
+          );
+
+
+          /**
+           * =================================
+           * BACKEND
+           * =================================
+           *
+           * Nosso backend:
+           *
+           * POST /pagamentos/cartao
+           *
+           * Depois:
+           *
+           * POST /v1/orders
+           */
+
+          const resposta =
+            await apiFetch(
+              "/pagamentos/cartao",
+              {
+                method:
+                  "POST",
+
+                body:
+                  JSON.stringify(
+                    dadosPagamento
+                  ),
+              }
+            );
+
+
+          /**
+           * =================================
+           * VALIDAR RESPOSTA
+           * =================================
+           */
+
+          if (
+            !resposta
+              ?.pagamento
+              ?.pagamentoId
+          ) {
+            throw new Error(
+              "A API não retornou os dados esperados do pagamento."
+            );
+          }
+
+
+          /**
+           * =================================
+           * NOTIFICAR COMPONENTE PAI
+           * =================================
+           */
+
+          onPagamentoCriado?.(
+            resposta.pagamento
+          );
+
+
+          return resposta;
+        } catch (error) {
+          console.error(
+            "Erro no pagamento com crédito:",
+            error
+          );
+
+          setErro(
+            error.message ||
+              "Não foi possível processar o pagamento."
+          );
+
+          /**
+           * O Brick precisa receber a rejeição
+           * para saber que o submit falhou.
+           */
+
+          throw error;
+        } finally {
+          setProcessando(
+            false
+          );
+        }
+      },
+      [
+        pedidoId,
+        onPagamentoCriado,
+      ]
+    );
 
 
   /**
@@ -271,49 +587,6 @@ export default function PagamentoCartao({
 
   /**
    * =========================================
-   * CUSTOMIZAÇÃO DO BRICK
-   * =========================================
-   *
-   * O MESMO Brick é utilizado para
-   * crédito e débito.
-   *
-   * Crédito:
-   * exclui debit_card.
-   *
-   * Débito:
-   * exclui credit_card e prepaid_card.
-   */
-
-  /**
- * =========================================
- * CUSTOMIZAÇÃO DO BRICK
- * =========================================
- */
-
-  const customization = {
-    paymentMethods: {
-      minInstallments:
-        tipoPagamento === "credito"
-          ? 1
-          : 1,
-
-      ...(tipoPagamento === "debito"
-        ? {
-          maxInstallments: 1,
-        }
-        : {}),
-    },
-
-    visual: {
-      style: {
-        theme: "default",
-      },
-    },
-  };
-
-
-  /**
-   * =========================================
    * COMPONENTE
    * =========================================
    */
@@ -322,137 +595,7 @@ export default function PagamentoCartao({
     <div
       className="space-y-5"
     >
-      {/*
-       * =====================================
-       * SELETOR CRÉDITO / DÉBITO
-       * =====================================
-       */}
-
-      <div
-        className="
-          grid
-          grid-cols-2
-          gap-3
-        "
-      >
-        {/*
-         * CRÉDITO
-         */}
-
-        <button
-          type="button"
-          disabled={
-            processando
-          }
-          onClick={() =>
-            alterarTipoPagamento(
-              "credito"
-            )
-          }
-          className={`
-            flex
-            items-center
-            justify-center
-            gap-2
-            border
-            px-4
-            py-3
-            text-sm
-            font-medium
-            transition
-
-            ${tipoPagamento ===
-              "credito"
-              ? `
-                  border-[#968052]
-                  bg-[#FCFAF5]
-                  text-[#6D5C37]
-                `
-              : `
-                  border-[#E9DCC4]
-                  bg-white
-                  text-[#756C5C]
-                  hover:border-[#CDBD9F]
-                `
-            }
-
-            ${processando
-              ? `
-                  cursor-not-allowed
-                  opacity-60
-                `
-              : ""
-            }
-          `}
-        >
-          <CreditCard
-            size={18}
-          />
-
-          Crédito
-        </button>
-
-
-        {/*
-         * DÉBITO
-         */}
-
-        <button
-          type="button"
-          disabled={
-            processando
-          }
-          onClick={() =>
-            alterarTipoPagamento(
-              "debito"
-            )
-          }
-          className={`
-            flex
-            items-center
-            justify-center
-            gap-2
-            border
-            px-4
-            py-3
-            text-sm
-            font-medium
-            transition
-
-            ${tipoPagamento ===
-              "debito"
-              ? `
-                  border-[#968052]
-                  bg-[#FCFAF5]
-                  text-[#6D5C37]
-                `
-              : `
-                  border-[#E9DCC4]
-                  bg-white
-                  text-[#756C5C]
-                  hover:border-[#CDBD9F]
-                `
-            }
-
-            ${processando
-              ? `
-                  cursor-not-allowed
-                  opacity-60
-                `
-              : ""
-            }
-          `}
-        >
-          <Landmark
-            size={18}
-          />
-
-          Débito
-        </button>
-      </div>
-
-
-      {/*
+      {/**
        * =====================================
        * DESCRIÇÃO
        * =====================================
@@ -470,26 +613,16 @@ export default function PagamentoCartao({
           text-[#756C5C]
         "
       >
-        {tipoPagamento ===
-          "credito" ? (
-          <p>
-            Pagamento com cartão de
-            crédito. Você poderá escolher
-            a quantidade de parcelas
-            disponibilizada pelo Mercado
-            Pago.
-          </p>
-        ) : (
-          <p>
-            Pagamento à vista com cartão
-            de débito. Utilize um cartão
-            compatível com débito online.
-          </p>
-        )}
+        <p>
+          Pagamento com cartão de crédito.
+          Você poderá escolher a quantidade
+          de parcelas disponibilizada pelo
+          Mercado Pago.
+        </p>
       </div>
 
 
-      {/*
+      {/**
        * =====================================
        * CARREGANDO
        * =====================================
@@ -512,15 +645,12 @@ export default function PagamentoCartao({
             className="animate-spin"
           />
 
-          {tipoPagamento ===
-            "debito"
-            ? "Carregando pagamento com cartão de débito..."
-            : "Carregando pagamento com cartão de crédito..."}
+          Carregando pagamento com cartão...
         </div>
       )}
 
 
-      {/*
+      {/**
        * =====================================
        * ERRO
        * =====================================
@@ -544,7 +674,7 @@ export default function PagamentoCartao({
       )}
 
 
-      {/*
+      {/**
        * =====================================
        * PROCESSANDO
        * =====================================
@@ -571,73 +701,59 @@ export default function PagamentoCartao({
             className="animate-spin"
           />
 
-          {tipoPagamento ===
-            "debito"
-            ? "Processando pagamento com débito..."
-            : "Processando pagamento com crédito..."}
+          Processando pagamento com crédito...
         </div>
       )}
 
 
-      {/*
+      {/**
        * =====================================
        * CARD PAYMENT BRICK
        * =====================================
        *
-       * A key é importante.
+       * O Brick agora trabalha exclusivamente
+       * com cartão de crédito.
        *
-       * Ao trocar:
-       *
-       * credito -> debito
-       *
-       * React recria o Brick com a nova
-       * configuração.
+       * Não precisamos mais recriá-lo para
+       * alternar entre crédito e débito.
        */}
 
       <div
         className={
           !pronto ||
-            processando
+          processando
             ? `
-              pointer-events-none
-              opacity-60
-            `
+                pointer-events-none
+                opacity-60
+              `
             : ""
         }
       >
         <CardPayment
-          initialization={{
-            amount: Number(valor),
-          }}
+          initialization={
+            initialization
+          }
 
           customization={
             customization
           }
 
-          onReady={() => {
-            setPronto(true);
-            setErro("");
-          }}
+          onReady={
+            handleReady
+          }
 
           onSubmit={
             enviarPagamento
           }
 
-          onError={(error) => {
-            console.error(
-              "Erro no Card Payment Brick:",
-              error
-            );
-
-            setErro(
-              "Não foi possível carregar ou processar os dados do cartão."
-            );
-          }}
+          onError={
+            handleError
+          }
         />
       </div>
 
 
-      {/*
+      {/**
        * =====================================
        * SEGURANÇA
        * =====================================

@@ -7,22 +7,37 @@ import {
   reconciliarPagamentoPorOrderId,
 } from "../../services/pagamentoService.js";
 
+/**
+ * =========================================
+ * WEBHOOK MERCADO PAGO - ORDERS API
+ * =========================================
+ *
+ * Arquitetura:
+ *
+ * PIX     -> Orders API
+ * CRÉDITO -> Orders API
+ *
+ * Evento processado:
+ *
+ * type = order
+ *
+ * O Mercado Pago envia:
+ *
+ * data.id = ORD...
+ *
+ * Não confiamos diretamente no status
+ * enviado pelo webhook.
+ *
+ * Depois de validar a assinatura,
+ * o service consulta:
+ *
+ * GET /v1/orders/{orderId}
+ */
 
 /**
  * =========================================
- * OBTER SECRET DO WEBHOOK
+ * SECRET DO WEBHOOK
  * =========================================
- *
- * Agora a AURELIA utiliza apenas
- * a aplicação responsável pelas Orders.
- *
- * Portanto:
- *
- * PIX
- * CRÉDITO
- * DÉBITO
- *
- * usam o mesmo webhook e o mesmo secret.
  */
 
 function obterWebhookSecret() {
@@ -39,17 +54,14 @@ function obterWebhookSecret() {
   return secret;
 }
 
-
 /**
  * =========================================
- * EXTRAIR PARTES DA ASSINATURA
+ * EXTRAIR X-SIGNATURE
  * =========================================
  *
- * Exemplo:
+ * Formato:
  *
- * x-signature:
- *
- * ts=123456789,v1=abcdef123...
+ * ts=123456789,v1=abcdef...
  */
 
 function extrairAssinatura(
@@ -61,11 +73,8 @@ function extrairAssinatura(
       "string"
   ) {
     return {
-      ts:
-        null,
-
-      v1:
-        null,
+      ts: null,
+      v1: null,
     };
   }
 
@@ -78,13 +87,11 @@ function extrairAssinatura(
       )
       .filter(Boolean);
 
-
   let ts =
     null;
 
   let v1 =
     null;
-
 
   for (
     const parte
@@ -96,10 +103,8 @@ function extrairAssinatura(
     ] =
       parte.split("=");
 
-
     const valorCompleto =
       valor.join("=");
-
 
     if (
       chave === "ts"
@@ -107,7 +112,6 @@ function extrairAssinatura(
       ts =
         valorCompleto;
     }
-
 
     if (
       chave === "v1"
@@ -117,24 +121,72 @@ function extrairAssinatura(
     }
   }
 
-
   return {
     ts,
     v1,
   };
 }
 
+/**
+ * =========================================
+ * EXTRAIR DATA.ID
+ * =========================================
+ *
+ * Orders API:
+ *
+ * ?data.id=ORD...&type=order
+ *
+ * O query parameter é utilizado
+ * prioritariamente porque também participa
+ * da validação da assinatura.
+ */
+
+function extrairDataId(
+  req
+) {
+  return (
+    req.query[
+      "data.id"
+    ] ||
+    req.query.id ||
+    req.body
+      ?.data
+      ?.id ||
+    null
+  );
+}
+
+/**
+ * =========================================
+ * IDENTIFICAR TIPO DA NOTIFICAÇÃO
+ * =========================================
+ */
+
+function extrairTipoNotificacao(
+  req
+) {
+  return (
+    req.query.type ||
+    req.body?.type ||
+    req.query.topic ||
+    req.body?.topic ||
+    null
+  );
+}
 
 /**
  * =========================================
  * VALIDAR ASSINATURA
  * =========================================
  *
- * Formato utilizado pelo Mercado Pago:
+ * Manifest:
  *
  * id:{data.id};
  * request-id:{x-request-id};
  * ts:{ts};
+ *
+ * O data.id deve ser convertido
+ * para lowercase.
  */
 
 function validarAssinaturaMercadoPago(
@@ -143,9 +195,9 @@ function validarAssinaturaMercadoPago(
   const secret =
     obterWebhookSecret();
 
-
   /**
-   * Headers enviados pelo Mercado Pago.
+   * Headers enviados pelo
+   * Mercado Pago.
    */
 
   const assinatura =
@@ -158,22 +210,15 @@ function validarAssinaturaMercadoPago(
       "x-request-id"
     ];
 
+  const dataId =
+    extrairDataId(
+      req
+    );
 
   /**
-   * Para validação da assinatura,
-   * devemos utilizar o data.id
-   * enviado na QUERY STRING.
-   *
-   * Exemplo:
-   *
-   * ?data.id=ORD...&type=order
+   * Para nossa integração Orders,
+   * esperamos os três componentes.
    */
-
-  const dataId =
-    req.query[
-      "data.id"
-    ];
-
 
   if (
     !assinatura ||
@@ -200,17 +245,8 @@ function validarAssinaturaMercadoPago(
       }
     );
 
-
     return false;
   }
-
-
-  /**
-   * Extrair:
-   *
-   * ts
-   * v1
-   */
 
   const {
     ts,
@@ -220,7 +256,6 @@ function validarAssinaturaMercadoPago(
       assinatura
     );
 
-
   if (
     !ts ||
     !v1
@@ -229,31 +264,20 @@ function validarAssinaturaMercadoPago(
       "Webhook com x-signature incompleto:",
       {
         possuiTs:
-          Boolean(
-            ts
-          ),
+          Boolean(ts),
 
         possuiV1:
-          Boolean(
-            v1
-          ),
+          Boolean(v1),
       }
     );
-
 
     return false;
   }
 
-
   /**
    * =====================================
-   * MANIFESTO
+   * MANIFEST
    * =====================================
-   *
-   * IMPORTANTE:
-   *
-   * O Mercado Pago utiliza o data.id
-   * em lowercase no manifesto.
    */
 
   const manifesto =
@@ -263,9 +287,10 @@ function validarAssinaturaMercadoPago(
     `request-id:${requestId};` +
     `ts:${ts};`;
 
-
   /**
-   * Gerar hash esperado.
+   * =====================================
+   * HMAC SHA-256
+   * =====================================
    */
 
   const hashCalculado =
@@ -280,13 +305,7 @@ function validarAssinaturaMercadoPago(
         "hex"
       );
 
-
   try {
-    /**
-     * Converter os hashes
-     * para Buffer.
-     */
-
     const hashRecebido =
       Buffer.from(
         v1,
@@ -299,10 +318,9 @@ function validarAssinaturaMercadoPago(
         "hex"
       );
 
-
     /**
-     * timingSafeEqual exige buffers
-     * com o mesmo tamanho.
+     * timingSafeEqual exige
+     * buffers do mesmo tamanho.
      */
 
     if (
@@ -316,62 +334,71 @@ function validarAssinaturaMercadoPago(
       return false;
     }
 
-
     return timingSafeEqual(
       hashRecebido,
       hashEsperado
     );
-  } catch (
-    erro
-  ) {
+  } catch (erro) {
     console.warn(
       "Erro ao comparar assinatura do webhook:",
       erro.message
     );
 
-
     return false;
   }
 }
 
-
 /**
  * =========================================
- * EXTRAIR ORDER ID
+ * VALIDAR ORDER ID
  * =========================================
  *
- * O Mercado Pago normalmente envia:
+ * Orders atuais possuem IDs como:
  *
- * query:
+ * ORD01...
  *
- * data.id=ORD...
- *
- * Mas também pode existir:
- *
- * body.data.id
- *
- * Usamos a query como prioridade.
+ * Não fazemos uma regex excessivamente
+ * restritiva para evitar incompatibilidade
+ * caso o formato do identificador evolua.
  */
 
-function extrairOrderId(
-  req
+function orderIdValido(
+  orderId
 ) {
   return (
-    req.query[
-      "data.id"
-    ] ||
-    req.body
-      ?.data
-      ?.id ||
-    null
+    typeof orderId ===
+      "string" &&
+    orderId
+      .trim()
+      .length > 0
   );
 }
-
 
 /**
  * =========================================
  * CONTROLLER
  * =========================================
+ *
+ * Fluxo:
+ *
+ * Mercado Pago
+ *      ↓
+ * webhook type=order
+ *      ↓
+ * validar HMAC
+ *      ↓
+ * data.id = ORD...
+ *      ↓
+ * reconciliarPagamentoPorOrderId()
+ *      ↓
+ * GET /v1/orders/{orderId}
+ *      ↓
+ * validar external_reference
+ *      ↓
+ * atualizar Pagamento
+ *      ↓
+ * se aprovado:
+ * Pedido -> PAGO
  */
 
 export async function receberWebhookPagamento(
@@ -386,18 +413,25 @@ export async function receberWebhookPagamento(
      */
 
     const tipo =
-      req.query.type ||
-      req.body?.type;
-
+      extrairTipoNotificacao(
+        req
+      );
 
     /**
-     * Agora processamos SOMENTE:
+     * =====================================
+     * IGNORAR EVENTOS NÃO RELACIONADOS
+     * =====================================
+     *
+     * A integração atual trabalha com
+     * Orders API.
+     *
+     * Portanto processamos:
      *
      * type = order
      *
-     * Outros eventos do Mercado Pago
-     * podem utilizar a mesma URL,
-     * mas não fazem parte deste fluxo.
+     * Outros eventos são reconhecidos
+     * pelo endpoint, mas não fazem parte
+     * deste fluxo.
      */
 
     if (
@@ -409,13 +443,10 @@ export async function receberWebhookPagamento(
         "tipo não informado"
       );
 
-
-      return res
-        .sendStatus(
-          200
-        );
+      return res.sendStatus(
+        200
+      );
     }
-
 
     /**
      * =====================================
@@ -428,7 +459,6 @@ export async function receberWebhookPagamento(
         req
       );
 
-
     if (
       !assinaturaValida
     ) {
@@ -436,11 +466,8 @@ export async function receberWebhookPagamento(
         "Webhook Order do Mercado Pago com assinatura inválida."
       );
 
-
       return res
-        .status(
-          401
-        )
+        .status(401)
         .json({
           sucesso:
             false,
@@ -450,31 +477,32 @@ export async function receberWebhookPagamento(
         });
     }
 
-
     /**
      * =====================================
      * ORDER ID
      * =====================================
+     *
+     * Para type=order:
+     *
+     * data.id = ORD...
      */
 
     const orderId =
-      extrairOrderId(
+      extrairDataId(
         req
       );
 
-
     if (
-      !orderId
+      !orderIdValido(
+        orderId
+      )
     ) {
       console.warn(
-        "Webhook Order sem identificador da Order."
+        "Webhook Order sem identificador válido."
       );
 
-
       return res
-        .status(
-          400
-        )
+        .status(400)
         .json({
           sucesso:
             false,
@@ -484,82 +512,101 @@ export async function receberWebhookPagamento(
         });
     }
 
+    const orderIdNormalizado =
+      String(
+        orderId
+      ).trim();
 
     /**
      * =====================================
-     * LOG DA NOTIFICAÇÃO
+     * LOG SEGURO
      * =====================================
      */
 
     console.log(
       "Webhook Order recebido:",
-      orderId
+      {
+        orderId:
+          orderIdNormalizado,
+
+        action:
+          req.body
+            ?.action ||
+          null,
+
+        liveMode:
+          req.body
+            ?.live_mode ??
+          null,
+      }
     );
 
-
     /**
-     * Não utilizamos o status recebido
-     * diretamente no webhook.
+     * =====================================
+     * RECONCILIAR ORDER
+     * =====================================
      *
-     * reconciliarPagamentoPorOrderId()
+     * IMPORTANTE:
      *
-     * fará:
+     * Não usamos:
      *
-     * GET /v1/orders/{id}
+     * req.body.data.status
      *
-     * e consultará o estado real
-     * da Order no Mercado Pago.
+     * como fonte de verdade.
+     *
+     * O service consulta novamente:
+     *
+     * GET /v1/orders/{orderId}
+     *
+     * usando nosso Access Token.
      */
 
     try {
       const pagamento =
         await reconciliarPagamentoPorOrderId(
-          String(
-            orderId
-          )
+          orderIdNormalizado
         );
-
 
       console.log(
         "Pagamento reconciliado pelo webhook Order:",
-        pagamento.id,
-        pagamento.status
-      );
-    } catch (
-      erro
-    ) {
-      /**
-       * Se a Order existir no Mercado Pago,
-       * mas ainda não tivermos salvo
-       * provedorOrdemId localmente,
-       * pode ocorrer uma condição de corrida:
-       *
-       * Mercado Pago envia webhook
-       * antes da nossa requisição HTTP
-       * terminar.
-       *
-       * Nesse caso o Mercado Pago
-       * poderá reenviar a notificação.
-       */
+        {
+          pagamentoId:
+            pagamento.id,
 
+          status:
+            pagamento.status,
+
+          orderId:
+            orderIdNormalizado,
+        }
+      );
+    } catch (erro) {
       console.error(
         "Erro ao reconciliar Order pelo webhook:",
         {
-          orderId,
+          orderId:
+            orderIdNormalizado,
 
           mensagem:
             erro.message,
+
+          status:
+            erro.status ||
+            null,
 
           stack:
             erro.stack,
         }
       );
 
+      /**
+       * Retornamos erro para que o
+       * Mercado Pago possa reenviar
+       * a notificação.
+       */
 
       return res
-        .status(
-          500
-        )
+        .status(500)
         .json({
           sucesso:
             false,
@@ -569,7 +616,6 @@ export async function receberWebhookPagamento(
         });
     }
 
-
     /**
      * =====================================
      * SUCESSO
@@ -577,9 +623,7 @@ export async function receberWebhookPagamento(
      */
 
     return res
-      .status(
-        200
-      )
+      .status(200)
       .json({
         sucesso:
           true,
@@ -587,19 +631,14 @@ export async function receberWebhookPagamento(
         mensagem:
           "Notificação processada.",
       });
-  } catch (
-    erro
-  ) {
+  } catch (erro) {
     console.error(
       "Erro ao receber webhook do Mercado Pago:",
       erro
     );
 
-
     return res
-      .status(
-        500
-      )
+      .status(500)
       .json({
         sucesso:
           false,

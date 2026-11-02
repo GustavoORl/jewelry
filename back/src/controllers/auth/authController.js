@@ -138,11 +138,15 @@ export async function logout(req, res) {
 export async function obterUsuarioAutenticado(req, res) {
   try {
     const usuario = await prisma.usuario.findUnique({
-      where: { id: req.usuario.id },
+      where: {
+        id: req.usuario.id,
+      },
+
       select: {
         id: true,
         nome: true,
         email: true,
+        telefone: true,
         tipo: true,
         ativo: true,
       },
@@ -154,9 +158,14 @@ export async function obterUsuarioAutenticado(req, res) {
       });
     }
 
-    return res.status(200).json({ usuario });
+    return res.status(200).json({
+      usuario,
+    });
   } catch (erro) {
-    console.error("Erro ao consultar usuário autenticado:", erro);
+    console.error(
+      "Erro ao consultar usuário autenticado:",
+      erro
+    );
 
     return res.status(500).json({
       mensagem: "Erro ao consultar sessão.",

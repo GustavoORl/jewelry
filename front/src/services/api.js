@@ -34,12 +34,13 @@ export async function apiFetch(caminho, opcoes = {}) {
       : await resposta.json().catch(() => null);
 
   if (!resposta.ok) {
-    throw new Error(
+  throw new Error(
+    resultado?.erro ||
       resultado?.mensagem ||
-        resultado?.message ||
-        "Não foi possível concluir a requisição."
-    );
-  }
+      resultado?.message ||
+      "Não foi possível concluir a requisição."
+  );
+}
 
   return resultado;
 }

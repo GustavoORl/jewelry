@@ -1,22 +1,26 @@
 import {
+  useCallback,
   useEffect,
+  useRef,
   useState,
 } from "react";
 
 import {
   Link,
+  useNavigate,
   useParams,
 } from "react-router-dom";
 
 import {
   ArrowLeft,
-  CheckCircle2,
+  Clock3,
   Copy,
   CreditCard,
   LoaderCircle,
   QrCode,
   RefreshCw,
   ShieldCheck,
+  TriangleAlert,
 } from "lucide-react";
 
 import {
@@ -30,16 +34,90 @@ const formatarPreco = (valor) =>
   new Intl.NumberFormat(
     "pt-BR",
     {
-      style:
-        "currency",
-
-      currency:
-        "BRL",
+      style: "currency",
+      currency: "BRL",
     }
   ).format(
     Number(valor) || 0
   );
 
+
+/**
+ * =========================================
+ * FORMATAR TEMPO
+ * =========================================
+ */
+
+function formatarTempoRestante(
+  totalSegundos
+) {
+  const segundosSeguros =
+    Math.max(
+      0,
+      totalSegundos
+    );
+
+  const minutos =
+    Math.floor(
+      segundosSeguros / 60
+    );
+
+  const segundos =
+    segundosSeguros % 60;
+
+  return `${String(minutos).padStart(
+    2,
+    "0"
+  )}:${String(segundos).padStart(
+    2,
+    "0"
+  )}`;
+}
+
+
+/**
+ * =========================================
+ * CALCULAR TEMPO RESTANTE
+ * =========================================
+ */
+
+function calcularTempoRestante(
+  expiraEm
+) {
+  if (!expiraEm) {
+    return null;
+  }
+
+  const expiracao =
+    new Date(
+      expiraEm
+    ).getTime();
+
+  if (
+    Number.isNaN(
+      expiracao
+    )
+  ) {
+    return null;
+  }
+
+  return Math.max(
+    0,
+    Math.ceil(
+      (
+        expiracao -
+        Date.now()
+      ) / 1000
+    )
+  );
+}
+
+
+/**
+ * =========================================
+ * STATUS
+ * =========================================
+ */
 
 const STATUS_FINAIS = [
   "APROVADO",
@@ -69,87 +147,107 @@ export default function Pagamento() {
   } = useParams();
 
 
+  const navigate =
+    useNavigate();
+
+
+  /**
+   * =========================================
+   * ESTADOS
+   * =========================================
+   */
+
   const [
     pedido,
     setPedido,
-  ] = useState(
-    null
-  );
+  ] = useState(null);
 
 
   const [
     pagamento,
     setPagamento,
-  ] = useState(
-    null
-  );
+  ] = useState(null);
 
-
-  /**
-   * Agora a tela possui somente
-   * dois métodos visuais:
-   *
-   * PIX
-   * CARTAO
-   *
-   * Crédito e débito são escolhidos
-   * dentro de PagamentoCartao.jsx.
-   */
 
   const [
     metodoSelecionado,
     setMetodoSelecionado,
-  ] = useState(
-    "PIX"
-  );
+  ] = useState("PIX");
 
 
   const [
     carregandoPedido,
     setCarregandoPedido,
-  ] = useState(
-    true
-  );
+  ] = useState(true);
 
 
   const [
     carregando,
     setCarregando,
-  ] = useState(
-    false
-  );
+  ] = useState(false);
 
 
   const [
     consultando,
     setConsultando,
-  ] = useState(
-    false
-  );
+  ] = useState(false);
 
 
   const [
     recuperando,
     setRecuperando,
-  ] = useState(
-    true
-  );
+  ] = useState(true);
 
 
   const [
     erro,
     setErro,
-  ] = useState(
-    ""
-  );
+  ] = useState("");
 
 
   const [
     copiado,
     setCopiado,
-  ] = useState(
-    false
-  );
+  ] = useState(false);
+
+
+  /**
+   * Tempo restante em segundos.
+   *
+   * null significa que ainda não temos
+   * informação suficiente para calcular.
+   */
+
+  const [
+    tempoRestante,
+    setTempoRestante,
+  ] = useState(null);
+
+
+  /**
+   * Usado enquanto aguardamos o backend
+   * confirmar que o pedido realmente foi
+   * cancelado após atingir 00:00.
+   */
+
+  const [
+    confirmandoExpiracao,
+    setConfirmandoExpiracao,
+  ] = useState(false);
+
+
+  /**
+   * =========================================
+   * CONTROLE DO POLLING
+   * =========================================
+   */
+
+  const consultaEmAndamentoRef =
+    useRef(false);
+
+
+  const confirmacaoExpiracaoRef =
+    useRef(false);
 
 
   /**
@@ -158,48 +256,74 @@ export default function Pagamento() {
    * =========================================
    */
 
-  async function carregarPedido() {
-    setCarregandoPedido(
-      true
+  const carregarPedido =
+    useCallback(
+      async ({
+        exibirCarregamento = true,
+        limparErro = true,
+      } = {}) => {
+        if (
+          exibirCarregamento
+        ) {
+          setCarregandoPedido(
+            true
+          );
+        }
+
+        if (
+          limparErro
+        ) {
+          setErro("");
+        }
+
+
+        try {
+          const resposta =
+            await apiFetch(
+              `/pedidos/${pedidoId}`
+            );
+
+
+          if (
+            !resposta?.pedido
+          ) {
+            throw new Error(
+              "A API não retornou os dados do pedido."
+            );
+          }
+
+
+          setPedido(
+            resposta.pedido
+          );
+
+
+          return resposta.pedido;
+        } catch (error) {
+          if (
+            exibirCarregamento
+          ) {
+            setErro(
+              error.message ||
+                "Não foi possível carregar o pedido."
+            );
+          }
+
+          throw error;
+        } finally {
+          if (
+            exibirCarregamento
+          ) {
+            setCarregandoPedido(
+              false
+            );
+          }
+        }
+      },
+      [
+        pedidoId,
+      ]
     );
-
-    setErro(
-      ""
-    );
-
-
-    try {
-      const resposta =
-        await apiFetch(
-          `/pedidos/${pedidoId}`
-        );
-
-
-      if (
-        !resposta?.pedido
-      ) {
-        throw new Error(
-          "A API não retornou os dados do pedido."
-        );
-      }
-
-
-      setPedido(
-        resposta.pedido
-      );
-    } catch (
-      error
-    ) {
-      setErro(
-        error.message ||
-        "Não foi possível carregar o pedido."
-      );
-    } finally {
-      setCarregandoPedido(
-        false
-      );
-    }
-  }
 
 
   /**
@@ -209,17 +333,36 @@ export default function Pagamento() {
    */
 
   async function gerarPix() {
-    setCarregando(
-      true
-    );
+    if (
+      carregando
+    ) {
+      return;
+    }
 
-    setErro(
-      ""
-    );
 
-    setCopiado(
-      false
-    );
+    /**
+     * Nunca confiamos somente no botão
+     * desabilitado.
+     */
+
+    if (
+      pedido?.status ===
+        "CANCELADO" ||
+      tempoRestante === 0
+    ) {
+      setErro(
+        "O prazo para pagamento deste pedido terminou."
+      );
+
+      return;
+    }
+
+
+    setCarregando(true);
+
+    setErro("");
+
+    setCopiado(false);
 
 
     try {
@@ -227,8 +370,7 @@ export default function Pagamento() {
         await apiFetch(
           "/pagamentos/pix",
           {
-            method:
-              "POST",
+            method: "POST",
 
             body:
               JSON.stringify({
@@ -253,20 +395,17 @@ export default function Pagamento() {
         resposta.pagamento
       );
 
+
       setMetodoSelecionado(
         "PIX"
       );
-    } catch (
-      error
-    ) {
+    } catch (error) {
       setErro(
         error.message ||
-        "Não foi possível gerar o Pix."
+          "Não foi possível gerar o Pix."
       );
     } finally {
-      setCarregando(
-        false
-      );
+      setCarregando(false);
     }
   }
 
@@ -277,86 +416,72 @@ export default function Pagamento() {
    * =========================================
    */
 
-  async function recuperarPagamento() {
-    setRecuperando(
-      true
-    );
+  const recuperarPagamento =
+    useCallback(
+      async () => {
+        setRecuperando(true);
 
-    setErro(
-      ""
-    );
+        setErro("");
 
 
-    try {
-      const resposta =
-        await apiFetch(
-          `/pagamentos/pedido/${pedidoId}`
-        );
+        try {
+          const resposta =
+            await apiFetch(
+              `/pagamentos/pedido/${pedidoId}`
+            );
 
 
-      const pagamentoRecuperado =
-        resposta.pagamento ||
-        null;
+          const pagamentoRecuperado =
+            resposta?.pagamento ||
+            null;
 
 
-      setPagamento(
-        pagamentoRecuperado
-      );
-
-
-      /**
-       * Se encontramos um pagamento,
-       * selecionamos automaticamente
-       * a área correspondente.
-       */
-
-      if (
-        pagamentoRecuperado
-      ) {
-        if (
-          pagamentoRecuperado
-            .metodo ===
-          "PIX"
-        ) {
-          setMetodoSelecionado(
-            "PIX"
-          );
-        }
-
-
-        /**
-         * Crédito e débito agora são
-         * exibidos no mesmo componente.
-         */
-
-        if (
-          [
-            "CREDITO",
-            "CARTAO",
-            "DEBITO",
-          ].includes(
+          setPagamento(
             pagamentoRecuperado
-              .metodo
-          )
-        ) {
-          setMetodoSelecionado(
-            "CARTAO"
           );
+
+
+          if (
+            pagamentoRecuperado
+          ) {
+            if (
+              pagamentoRecuperado
+                .metodo ===
+              "PIX"
+            ) {
+              setMetodoSelecionado(
+                "PIX"
+              );
+            }
+
+
+            if (
+              [
+                "CREDITO",
+                "CARTAO",
+              ].includes(
+                pagamentoRecuperado
+                  .metodo
+              )
+            ) {
+              setMetodoSelecionado(
+                "CARTAO"
+              );
+            }
+          }
+        } catch (error) {
+          setErro(
+            error.message ||
+              "Não foi possível recuperar o pagamento."
+          );
+        } finally {
+          setRecuperando(false);
         }
-      }
-    } catch (
-      error
-    ) {
-      setErro(
-        error.message ||
-        "Não foi possível recuperar o pagamento."
-      );
-    } finally {
-      setRecuperando(
-        false
-      );
-    }
-  }
+      },
+      [
+        pedidoId,
+      ]
+    );
 
 
   /**
@@ -365,46 +490,72 @@ export default function Pagamento() {
    * =========================================
    */
 
-  async function consultarStatus() {
-    if (
-      !pagamento?.pagamentoId
-    ) {
-      return;
-    }
+  const consultarStatus =
+    useCallback(
+      async (
+        pagamentoId
+      ) => {
+        if (
+          !pagamentoId ||
+          consultaEmAndamentoRef.current
+        ) {
+          return;
+        }
 
 
-    setConsultando(
-      true
+        consultaEmAndamentoRef.current =
+          true;
+
+
+        setConsultando(true);
+
+
+        try {
+          const resposta =
+            await apiFetch(
+              `/pagamentos/${pagamentoId}`
+            );
+
+
+          if (
+            !resposta?.pagamento
+          ) {
+            return;
+          }
+
+
+          setPagamento(
+            (atual) => {
+              if (!atual) {
+                return resposta.pagamento;
+              }
+
+
+              return {
+                ...atual,
+                ...resposta.pagamento,
+
+                pix:
+                  resposta.pagamento.pix ||
+                  atual.pix,
+              };
+            }
+          );
+        } catch (error) {
+          console.error(
+            "Erro ao consultar pagamento:",
+            error
+          );
+        } finally {
+          consultaEmAndamentoRef.current =
+            false;
+
+
+          setConsultando(false);
+        }
+      },
+      []
     );
-
-
-    try {
-      const resposta =
-        await apiFetch(
-          `/pagamentos/${pagamento.pagamentoId}`
-        );
-
-
-      setPagamento(
-        (atual) => ({
-          ...atual,
-
-          ...resposta.pagamento,
-        })
-      );
-    } catch (
-      error
-    ) {
-      console.error(
-        "Erro ao consultar pagamento:",
-        error
-      );
-    } finally {
-      setConsultando(
-        false
-      );
-    }
-  }
 
 
   /**
@@ -413,56 +564,361 @@ export default function Pagamento() {
    * =========================================
    */
 
-  useEffect(() => {
-    carregarPedido();
+  useEffect(
+    () => {
+      carregarPedido()
+        .catch(() => {});
 
-    recuperarPagamento();
-  }, [
-    pedidoId,
-  ]);
+      recuperarPagamento();
+    },
+    [
+      carregarPedido,
+      recuperarPagamento,
+    ]
+  );
 
 
   /**
    * =========================================
-   * POLLING
+   * CONTADOR DO PEDIDO
+   * =========================================
+   *
+   * IMPORTANTE:
+   *
+   * O contador NÃO começa em 15 minutos
+   * quando a página abre.
+   *
+   * Ele sempre calcula:
+   *
+   * pedido.expiraEm - horário atual
+   *
+   * Portanto atualizar/fechar a página não
+   * reinicia o prazo.
+   */
+
+  useEffect(
+    () => {
+      if (
+        !pedido?.expiraEm
+      ) {
+        setTempoRestante(
+          null
+        );
+
+        return;
+      }
+
+
+      /**
+       * Pedidos que já saíram de PENDENTE
+       * não precisam mais de contagem.
+       */
+
+      if (
+        pedido.status !==
+        "PENDENTE"
+      ) {
+        setTempoRestante(
+          calcularTempoRestante(
+            pedido.expiraEm
+          )
+        );
+
+        return;
+      }
+
+
+      const atualizarContador =
+        () => {
+          const restante =
+            calcularTempoRestante(
+              pedido.expiraEm
+            );
+
+          setTempoRestante(
+            restante
+          );
+        };
+
+
+      /**
+       * Atualiza imediatamente.
+       */
+
+      atualizarContador();
+
+
+      /**
+       * Depois atualiza a cada segundo.
+       */
+
+      const intervalo =
+        setInterval(
+          atualizarContador,
+          1000
+        );
+
+
+      return () => {
+        clearInterval(
+          intervalo
+        );
+      };
+    },
+    [
+      pedido?.expiraEm,
+      pedido?.status,
+    ]
+  );
+
+
+  /**
+   * =========================================
+   * CONFIRMAR EXPIRAÇÃO NO BACKEND
+   * =========================================
+   *
+   * Quando o navegador chega a 00:00,
+   * bloqueamos a interface imediatamente.
+   *
+   * Porém quem realmente decide que o
+   * pedido foi cancelado é o backend.
+   *
+   * Como a rotina do servidor verifica os
+   * pedidos periodicamente, consultamos o
+   * pedido até receber CANCELADO.
+   *
+   * Se o pagamento tiver sido aprovado no
+   * mesmo instante, receberemos PAGO em vez
+   * de CANCELADO.
+   */
+
+  useEffect(
+    () => {
+      if (
+        tempoRestante !== 0 ||
+        !pedido ||
+        pedido.status !==
+          "PENDENTE"
+      ) {
+        return;
+      }
+
+
+      let cancelado = false;
+
+
+      const verificarPedido =
+        async () => {
+          if (
+            cancelado ||
+            confirmacaoExpiracaoRef.current
+          ) {
+            return;
+          }
+
+
+          confirmacaoExpiracaoRef.current =
+            true;
+
+          setConfirmandoExpiracao(
+            true
+          );
+
+
+          try {
+            const pedidoAtualizado =
+              await carregarPedido({
+                exibirCarregamento:
+                  false,
+
+                limparErro:
+                  false,
+              });
+
+
+            /**
+             * Se o pagamento ganhou a corrida
+             * e o pedido virou PAGO, não
+             * mostramos como expirado.
+             */
+
+            if (
+              pedidoAtualizado
+                ?.status ===
+              "PAGO"
+            ) {
+              setConfirmandoExpiracao(
+                false
+              );
+            }
+          } catch (error) {
+            console.error(
+              "Erro ao confirmar expiração do pedido:",
+              error
+            );
+          } finally {
+            confirmacaoExpiracaoRef.current =
+              false;
+          }
+        };
+
+
+      verificarPedido();
+
+
+      const intervalo =
+        setInterval(
+          verificarPedido,
+          3000
+        );
+
+
+      return () => {
+        cancelado = true;
+
+        clearInterval(
+          intervalo
+        );
+
+        setConfirmandoExpiracao(
+          false
+        );
+      };
+    },
+    [
+      tempoRestante,
+      pedido?.status,
+      carregarPedido,
+    ]
+  );
+
+
+  /**
+   * =========================================
+   * POLLING DO PAGAMENTO
    * =========================================
    */
 
-  useEffect(() => {
-    if (
-      !pagamento?.pagamentoId
-    ) {
-      return;
-    }
+  useEffect(
+    () => {
+      const pagamentoId =
+        pagamento?.pagamentoId;
 
 
-    if (
-      STATUS_FINAIS.includes(
-        pagamento.status
-      )
-    ) {
-      return;
-    }
+      const status =
+        pagamento?.status;
 
 
-    const intervalo =
-      setInterval(
-        () => {
-          consultarStatus();
-        },
+      if (
+        !pagamentoId ||
+        !status
+      ) {
+        return;
+      }
 
-        5000
+
+      /**
+       * Se o pedido já expirou visualmente,
+       * paramos de ficar consultando o
+       * pagamento nesta tela.
+       */
+
+      if (
+        tempoRestante === 0 &&
+        pedido?.status ===
+          "PENDENTE"
+      ) {
+        return;
+      }
+
+
+      if (
+        pedido?.status ===
+        "CANCELADO"
+      ) {
+        return;
+      }
+
+
+      if (
+        STATUS_FINAIS.includes(
+          status
+        )
+      ) {
+        return;
+      }
+
+
+      if (
+        !STATUS_EM_ANDAMENTO.includes(
+          status
+        )
+      ) {
+        return;
+      }
+
+
+      consultarStatus(
+        pagamentoId
       );
 
 
-    return () =>
-      clearInterval(
-        intervalo
+      const intervalo =
+        setInterval(
+          () => {
+            consultarStatus(
+              pagamentoId
+            );
+          },
+          5000
+        );
+
+
+      return () => {
+        clearInterval(
+          intervalo
+        );
+      };
+    },
+    [
+      pagamento?.pagamentoId,
+      pagamento?.status,
+      pedido?.status,
+      tempoRestante,
+      consultarStatus,
+    ]
+  );
+
+
+  /**
+   * =========================================
+   * REDIRECIONAR APÓS APROVAÇÃO
+   * =========================================
+   */
+
+  useEffect(
+    () => {
+      if (
+        pagamento?.status !==
+        "APROVADO"
+      ) {
+        return;
+      }
+
+
+      navigate(
+        `/pedidos/${pedidoId}/confirmado`,
+        {
+          replace: true,
+        }
       );
-  }, [
-    pagamento?.pagamentoId,
-    pagamento?.status,
-  ]);
+    },
+    [
+      pagamento?.status,
+      pedidoId,
+      navigate,
+    ]
+  );
 
 
   /**
@@ -479,6 +935,19 @@ export default function Pagamento() {
     }
 
 
+    if (
+      pedido?.status ===
+        "CANCELADO" ||
+      tempoRestante === 0
+    ) {
+      setErro(
+        "Este pedido expirou. O código Pix não deve mais ser utilizado."
+      );
+
+      return;
+    }
+
+
     try {
       await navigator
         .clipboard
@@ -487,18 +956,13 @@ export default function Pagamento() {
         );
 
 
-      setCopiado(
-        true
-      );
+      setCopiado(true);
 
 
       setTimeout(
         () => {
-          setCopiado(
-            false
-          );
+          setCopiado(false);
         },
-
         2000
       );
     } catch {
@@ -520,11 +984,48 @@ export default function Pagamento() {
     "APROVADO";
 
 
+  const pedidoCancelado =
+    pedido?.status ===
+    "CANCELADO";
+
+
+  const pedidoPago =
+    [
+      "PAGO",
+      "EM_PREPARACAO",
+      "ENVIADO",
+      "ENTREGUE",
+    ].includes(
+      pedido?.status
+    );
+
+
+  /**
+   * O prazo é considerado encerrado
+   * imediatamente no navegador ao atingir
+   * zero.
+   *
+   * O backend continua sendo a autoridade
+   * sobre o status real.
+   */
+
+  const prazoEncerrado =
+    tempoRestante === 0 &&
+    pedido?.status ===
+      "PENDENTE";
+
+
+  const pedidoExpirado =
+    pedidoCancelado ||
+    prazoEncerrado;
+
+
   const permiteNovaTentativa =
     pagamento &&
     STATUS_NOVA_TENTATIVA.includes(
       pagamento.status
-    );
+    ) &&
+    !pedidoExpirado;
 
 
   const pagamentoEmAndamento =
@@ -534,26 +1035,21 @@ export default function Pagamento() {
     );
 
 
-  /**
-   * Crédito e débito compartilham
-   * os mesmos estados visuais.
-   */
-
   const pagamentoCartao =
     pagamento &&
     [
       "CREDITO",
       "CARTAO",
-      "DEBITO",
     ].includes(
       pagamento.metodo
     );
 
 
-  const cartaoRecusado =
+  const cartaoFinalizadoSemSucesso =
     pagamentoCartao &&
-    pagamento.status ===
-      "RECUSADO";
+    STATUS_NOVA_TENTATIVA.includes(
+      pagamento.status
+    );
 
 
   const cartaoEmAndamento =
@@ -569,12 +1065,15 @@ export default function Pagamento() {
       "PIX" &&
     !STATUS_FINAIS.includes(
       pagamento.status
-    );
+    ) &&
+    !pedidoExpirado;
 
 
   const podeEscolherMetodo =
     !pagamentoEmAndamento &&
-    !aprovado;
+    !aprovado &&
+    !pedidoExpirado &&
+    !pedidoPago;
 
 
   const carregandoPagina =
@@ -589,24 +1088,25 @@ export default function Pagamento() {
 
   /**
    * =========================================
-   * NOVA TENTATIVA
+   * NOVA TENTATIVA DE CARTÃO
    * =========================================
-   *
-   * Quando uma tentativa de cartão
-   * termina recusada/cancelada/expirada,
-   * precisamos liberar o componente
-   * para que uma nova tentativa seja
-   * criada.
    */
 
   function prepararNovaTentativaCartao() {
-    setPagamento(
-      null
-    );
+    if (
+      pedidoExpirado
+    ) {
+      setErro(
+        "O prazo para pagamento deste pedido terminou."
+      );
 
-    setErro(
-      ""
-    );
+      return;
+    }
+
+
+    setPagamento(null);
+
+    setErro("");
 
     setMetodoSelecionado(
       "CARTAO"
@@ -677,16 +1177,7 @@ export default function Pagamento() {
               text-center
             "
           >
-            {aprovado ? (
-              <CheckCircle2
-                size={48}
-                className="
-                  mx-auto
-                  mb-4
-                  text-green-600
-                "
-              />
-            ) : metodoEhCartao ? (
+            {metodoEhCartao ? (
               <CreditCard
                 size={42}
                 className="
@@ -726,9 +1217,7 @@ export default function Pagamento() {
                 text-3xl
               "
             >
-              {aprovado
-                ? "Pagamento aprovado!"
-                : "Finalizar pagamento"}
+              Finalizar pagamento
             </h1>
 
 
@@ -747,18 +1236,276 @@ export default function Pagamento() {
             )}
 
 
-            <p
-              className="
-                mt-3
-                text-sm
-                text-[#756C5C]
-              "
-            >
-              {aprovado
-                ? "Recebemos a confirmação do seu pagamento."
-                : "Escolha como deseja concluir o seu pedido."}
-            </p>
+            {!pedidoExpirado && (
+              <p
+                className="
+                  mt-3
+                  text-sm
+                  text-[#756C5C]
+                "
+              >
+                Escolha como deseja concluir
+                o seu pedido.
+              </p>
+            )}
           </div>
+
+
+          {/*
+           * =====================================
+           * CONTADOR
+           * =====================================
+           */}
+
+          {!carregandoPagina &&
+            pedido &&
+            pedido.status ===
+              "PENDENTE" &&
+            tempoRestante !==
+              null &&
+            !pedidoCancelado && (
+              <div
+                className={`
+                  mb-7
+                  border
+                  px-5
+                  py-4
+
+                  ${
+                    prazoEncerrado
+                      ? `
+                          border-red-200
+                          bg-red-50
+                        `
+                      : tempoRestante <=
+                        180
+                      ? `
+                          border-amber-200
+                          bg-amber-50
+                        `
+                      : `
+                          border-[#E9DCC4]
+                          bg-[#FCFAF5]
+                        `
+                  }
+                `}
+              >
+                <div
+                  className="
+                    flex
+                    items-center
+                    justify-center
+                    gap-3
+                  "
+                >
+                  <Clock3
+                    size={20}
+                    className={
+                      prazoEncerrado
+                        ? "text-red-700"
+                        : tempoRestante <=
+                          180
+                        ? "text-amber-700"
+                        : "text-[#968052]"
+                    }
+                  />
+
+                  <div
+                    className="
+                      text-center
+                    "
+                  >
+                    <p
+                      className="
+                        text-xs
+                        uppercase
+                        tracking-[0.15em]
+                        text-[#756C5C]
+                      "
+                    >
+                      Tempo restante para pagamento
+                    </p>
+
+                    <p
+                      className={`
+                        mt-1
+                        font-mono
+                        text-2xl
+                        font-semibold
+
+                        ${
+                          prazoEncerrado
+                            ? "text-red-700"
+                            : tempoRestante <=
+                              180
+                            ? "text-amber-700"
+                            : "text-[#211C14]"
+                        }
+                      `}
+                    >
+                      {formatarTempoRestante(
+                        tempoRestante
+                      )}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+
+          {/*
+           * =====================================
+           * PEDIDO EXPIRADO
+           * =====================================
+           */}
+
+          {!carregandoPagina &&
+            pedido &&
+            pedidoExpirado && (
+              <div
+                className="
+                  mb-7
+                  border
+                  border-red-200
+                  bg-red-50
+                  px-5
+                  py-5
+                "
+              >
+                <div
+                  className="
+                    flex
+                    items-start
+                    gap-3
+                  "
+                >
+                  <TriangleAlert
+                    size={22}
+                    className="
+                      mt-0.5
+                      shrink-0
+                      text-red-700
+                    "
+                  />
+
+                  <div>
+                    <p
+                      className="
+                        font-medium
+                        text-red-800
+                      "
+                    >
+                      Prazo de pagamento encerrado
+                    </p>
+
+                    <p
+                      className="
+                        mt-2
+                        text-sm
+                        leading-6
+                        text-red-700
+                      "
+                    >
+                      O tempo reservado para concluir
+                      o pagamento deste pedido terminou.
+                      Por segurança, não é mais possível
+                      gerar Pix ou realizar o pagamento
+                      com cartão.
+                    </p>
+
+
+                    {confirmandoExpiracao &&
+                      !pedidoCancelado && (
+                        <p
+                          className="
+                            mt-3
+                            flex
+                            items-center
+                            gap-2
+                            text-xs
+                            text-red-700
+                          "
+                        >
+                          <LoaderCircle
+                            size={14}
+                            className="
+                              animate-spin
+                            "
+                          />
+
+                          Confirmando expiração
+                          do pedido...
+                        </p>
+                      )}
+
+
+                    {pedidoCancelado && (
+                      <p
+                        className="
+                          mt-3
+                          text-xs
+                          text-red-700
+                        "
+                      >
+                        O pedido foi cancelado e os
+                        produtos reservados foram
+                        devolvidos ao estoque.
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+
+                <div
+                  className="
+                    mt-5
+                    flex
+                    flex-col
+                    gap-3
+                    sm:flex-row
+                  "
+                >
+                  <Link
+                    to="/produtos"
+                    className="
+                      flex
+                      flex-1
+                      items-center
+                      justify-center
+                      bg-[#211C14]
+                      px-5
+                      py-3
+                      text-sm
+                      text-white
+                      transition
+                      hover:bg-[#968052]
+                    "
+                  >
+                    Voltar aos produtos
+                  </Link>
+
+                  <Link
+                    to="/pedidos"
+                    className="
+                      flex
+                      flex-1
+                      items-center
+                      justify-center
+                      border
+                      border-[#E9DCC4]
+                      px-5
+                      py-3
+                      text-sm
+                      text-[#211C14]
+                      transition
+                      hover:border-[#968052]
+                    "
+                  >
+                    Ver meus pedidos
+                  </Link>
+                </div>
+              </div>
+            )}
 
 
           {/*
@@ -767,28 +1514,29 @@ export default function Pagamento() {
            * =====================================
            */}
 
-          {erro && (
-            <div
-              role="alert"
-              className="
-                mb-6
-                border
-                border-red-200
-                bg-red-50
-                px-4
-                py-3
-                text-sm
-                text-red-800
-              "
-            >
-              {erro}
-            </div>
-          )}
+          {erro &&
+            !pedidoExpirado && (
+              <div
+                role="alert"
+                className="
+                  mb-6
+                  border
+                  border-red-200
+                  bg-red-50
+                  px-4
+                  py-3
+                  text-sm
+                  text-red-800
+                "
+              >
+                {erro}
+              </div>
+            )}
 
 
           {/*
            * =====================================
-           * CARREGAMENTO DA PÁGINA
+           * CARREGAMENTO
            * =====================================
            */}
 
@@ -820,19 +1568,12 @@ export default function Pagamento() {
            * =====================================
            * SELETOR DE MÉTODO
            * =====================================
-           *
-           * Agora são apenas:
-           *
-           * PIX
-           * CARTÃO
-           *
-           * Crédito/débito ficam dentro do
-           * componente PagamentoCartao.
            */}
 
           {!carregandoPagina &&
             pedido &&
             !aprovado &&
+            !pedidoExpirado &&
             podeEscolherMetodo && (
               <div
                 className="
@@ -843,10 +1584,6 @@ export default function Pagamento() {
                   sm:grid-cols-2
                 "
               >
-                {/*
-                 * PIX
-                 */}
-
                 <button
                   type="button"
                   onClick={() =>
@@ -864,14 +1601,14 @@ export default function Pagamento() {
                       metodoSelecionado ===
                       "PIX"
                         ? `
-                          border-[#968052]
-                          bg-[#FCFAF5]
-                        `
+                            border-[#968052]
+                            bg-[#FCFAF5]
+                          `
                         : `
-                          border-[#E9DCC4]
-                          bg-white
-                          hover:border-[#968052]
-                        `
+                            border-[#E9DCC4]
+                            bg-white
+                            hover:border-[#968052]
+                          `
                     }
                   `}
                 >
@@ -898,7 +1635,6 @@ export default function Pagamento() {
                     </span>
                   </div>
 
-
                   <p
                     className="
                       mt-2
@@ -912,10 +1648,6 @@ export default function Pagamento() {
                   </p>
                 </button>
 
-
-                {/*
-                 * CARTÃO
-                 */}
 
                 <button
                   type="button"
@@ -934,14 +1666,14 @@ export default function Pagamento() {
                       metodoSelecionado ===
                       "CARTAO"
                         ? `
-                          border-[#968052]
-                          bg-[#FCFAF5]
-                        `
+                            border-[#968052]
+                            bg-[#FCFAF5]
+                          `
                         : `
-                          border-[#E9DCC4]
-                          bg-white
-                          hover:border-[#968052]
-                        `
+                            border-[#E9DCC4]
+                            bg-white
+                            hover:border-[#968052]
+                          `
                     }
                   `}
                 >
@@ -964,10 +1696,9 @@ export default function Pagamento() {
                         font-medium
                       "
                     >
-                      Cartão
+                      Cartão de crédito
                     </span>
                   </div>
-
 
                   <p
                     className="
@@ -977,9 +1708,9 @@ export default function Pagamento() {
                       text-[#756C5C]
                     "
                   >
-                    Crédito ou débito com
-                    processamento seguro
-                    pelo Mercado Pago.
+                    Pagamento com cartão de
+                    crédito e possibilidade
+                    de parcelamento.
                   </p>
                 </button>
               </div>
@@ -995,6 +1726,7 @@ export default function Pagamento() {
           {!carregandoPagina &&
             pedido &&
             !aprovado &&
+            !pedidoExpirado &&
             pagamentoEmAndamento &&
             !pagamentoCartao && (
               <div
@@ -1016,7 +1748,6 @@ export default function Pagamento() {
                   Existe um pagamento em
                   andamento.
                 </p>
-
 
                 <p
                   className="
@@ -1043,6 +1774,7 @@ export default function Pagamento() {
           {!carregandoPagina &&
             pedido &&
             !aprovado &&
+            !pedidoExpirado &&
             metodoSelecionado ===
               "PIX" && (
               <div
@@ -1057,7 +1789,8 @@ export default function Pagamento() {
                       gerarPix
                     }
                     disabled={
-                      carregando
+                      carregando ||
+                      pedidoExpirado
                     }
                     className="
                       flex
@@ -1115,7 +1848,6 @@ export default function Pagamento() {
                           Status do pagamento
                         </p>
 
-
                         <p
                           className="
                             mt-2
@@ -1125,7 +1857,6 @@ export default function Pagamento() {
                         >
                           {pagamento.status}
                         </p>
-
 
                         {pagamento.valor && (
                           <p
@@ -1209,7 +1940,6 @@ export default function Pagamento() {
                               e cola
                             </label>
 
-
                             <div
                               className="
                                 flex
@@ -1235,11 +1965,13 @@ export default function Pagamento() {
                                 "
                               />
 
-
                               <button
                                 type="button"
                                 onClick={
                                   copiarCodigo
+                                }
+                                disabled={
+                                  pedidoExpirado
                                 }
                                 className="
                                   flex
@@ -1251,6 +1983,8 @@ export default function Pagamento() {
                                   text-xs
                                   text-white
                                   hover:bg-[#968052]
+                                  disabled:cursor-not-allowed
+                                  disabled:bg-[#B9B2A6]
                                 "
                               >
                                 <Copy
@@ -1301,7 +2035,6 @@ export default function Pagamento() {
                                 "Este pagamento foi recusado."}
                             </p>
 
-
                             <p
                               className="
                                 mt-2
@@ -1312,10 +2045,10 @@ export default function Pagamento() {
                             >
                               Você pode gerar
                               uma nova tentativa
-                              para este pedido.
+                              enquanto o prazo do
+                              pedido estiver ativo.
                             </p>
                           </div>
-
 
                           <button
                             type="button"
@@ -1323,7 +2056,8 @@ export default function Pagamento() {
                               gerarPix
                             }
                             disabled={
-                              carregando
+                              carregando ||
+                              pedidoExpirado
                             }
                             className="
                               flex
@@ -1383,7 +2117,6 @@ export default function Pagamento() {
                               "
                             />
 
-
                             <p
                               className="
                                 text-xs
@@ -1413,6 +2146,7 @@ export default function Pagamento() {
           {!carregandoPagina &&
             pedido &&
             !aprovado &&
+            !pedidoExpirado &&
             metodoEhCartao &&
             cartaoEmAndamento && (
               <div
@@ -1446,7 +2180,6 @@ export default function Pagamento() {
                       "
                     />
 
-
                     <div>
                       <p
                         className="
@@ -1456,7 +2189,6 @@ export default function Pagamento() {
                       >
                         Processando pagamento
                       </p>
-
 
                       <p
                         className="
@@ -1495,7 +2227,6 @@ export default function Pagamento() {
                     Status do pagamento
                   </p>
 
-
                   <p
                     className="
                       mt-2
@@ -1505,7 +2236,6 @@ export default function Pagamento() {
                   >
                     {pagamento.status}
                   </p>
-
 
                   {pagamento.valor && (
                     <p
@@ -1566,7 +2296,6 @@ export default function Pagamento() {
                     "
                   />
 
-
                   <p
                     className="
                       text-xs
@@ -1585,15 +2314,16 @@ export default function Pagamento() {
 
           {/*
            * =====================================
-           * CARTÃO RECUSADO
+           * CARTÃO FINALIZADO SEM SUCESSO
            * =====================================
            */}
 
           {!carregandoPagina &&
             pedido &&
             !aprovado &&
+            !pedidoExpirado &&
             metodoEhCartao &&
-            cartaoRecusado && (
+            cartaoFinalizadoSemSucesso && (
               <div
                 className="
                   space-y-4
@@ -1624,7 +2354,6 @@ export default function Pagamento() {
                       "
                     />
 
-
                     <div>
                       <p
                         className="
@@ -1632,9 +2361,18 @@ export default function Pagamento() {
                           text-red-800
                         "
                       >
-                        Pagamento recusado
-                      </p>
+                        {pagamento.status ===
+                          "RECUSADO" &&
+                          "Pagamento recusado"}
 
+                        {pagamento.status ===
+                          "CANCELADO" &&
+                          "Pagamento cancelado"}
+
+                        {pagamento.status ===
+                          "EXPIRADO" &&
+                          "Pagamento expirado"}
+                      </p>
 
                       <p
                         className="
@@ -1645,7 +2383,7 @@ export default function Pagamento() {
                         "
                       >
                         Não foi possível
-                        aprovar o pagamento
+                        concluir o pagamento
                         com este cartão.
                         Verifique os dados,
                         tente novamente ou
@@ -1662,6 +2400,9 @@ export default function Pagamento() {
                   onClick={
                     prepararNovaTentativaCartao
                   }
+                  disabled={
+                    pedidoExpirado
+                  }
                   className="
                     w-full
                     bg-[#211C14]
@@ -1671,6 +2412,8 @@ export default function Pagamento() {
                     text-white
                     transition
                     hover:bg-[#968052]
+                    disabled:cursor-not-allowed
+                    disabled:bg-[#B9B2A6]
                   "
                 >
                   Tentar novamente com cartão
@@ -1683,20 +2426,17 @@ export default function Pagamento() {
            * =====================================
            * FORMULÁRIO DE CARTÃO
            * =====================================
-           *
-           * Um único componente agora trata:
-           *
-           * crédito
-           * débito
            */}
 
           {!carregandoPagina &&
             pedido &&
             !aprovado &&
+            !pedidoExpirado &&
+            !pedidoPago &&
             metodoSelecionado ===
               "CARTAO" &&
             !cartaoEmAndamento &&
-            !cartaoRecusado &&
+            !cartaoFinalizadoSemSucesso &&
             !pagamento && (
               <PagamentoCartao
                 pedidoId={
@@ -1710,15 +2450,21 @@ export default function Pagamento() {
                 onPagamentoCriado={(
                   novoPagamento
                 ) => {
-                  setErro(
-                    ""
-                  );
+                  /**
+                   * Pode acontecer de o Brick
+                   * terminar exatamente quando
+                   * o contador chega a zero.
+                   *
+                   * O backend ainda é quem deve
+                   * rejeitar uma tentativa
+                   * realmente vencida.
+                   */
 
+                  setErro("");
 
                   setPagamento(
                     novoPagamento
                   );
-
 
                   setMetodoSelecionado(
                     "CARTAO"
@@ -1730,76 +2476,67 @@ export default function Pagamento() {
 
           {/*
            * =====================================
-           * PAGAMENTO APROVADO
+           * PEDIDO JÁ PAGO
            * =====================================
            */}
 
           {!carregandoPagina &&
-            aprovado && (
+            pedido &&
+            pedidoPago &&
+            !aprovado && (
               <div
                 className="
-                  space-y-6
+                  border
+                  border-[#E9DCC4]
+                  bg-[#FCFAF5]
+                  p-5
+                  text-center
                 "
               >
-                <div
+                <ShieldCheck
+                  size={30}
                   className="
-                    border-y
-                    border-[#E9DCC4]
-                    py-5
-                    text-center
+                    mx-auto
+                    text-[#968052]
+                  "
+                />
+
+                <p
+                  className="
+                    mt-3
+                    font-medium
                   "
                 >
-                  <p
-                    className="
-                      text-xs
-                      text-[#756C5C]
-                    "
-                  >
-                    Status do pagamento
-                  </p>
+                  Este pedido já foi pago.
+                </p>
 
-
-                  <p
-                    className="
-                      mt-2
-                      text-lg
-                      font-medium
-                      text-green-700
-                    "
-                  >
-                    APROVADO
-                  </p>
-
-
-                  {pagamento?.valor && (
-                    <p
-                      className="
-                        mt-1
-                        text-sm
-                        text-[#756C5C]
-                      "
-                    >
-                      {formatarPreco(
-                        pagamento.valor
-                      )}
-                    </p>
-                  )}
-                </div>
-
-
-                <div
+                <p
                   className="
-                    bg-green-50
-                    p-4
-                    text-center
+                    mt-2
                     text-sm
-                    text-green-800
+                    text-[#756C5C]
                   "
                 >
-                  Seu pedido foi confirmado.
-                  Obrigado por comprar na
-                  AURELIA!
-                </div>
+                  Você pode acompanhar o
+                  andamento em Meus Pedidos.
+                </p>
+
+                <Link
+                  to={`/pedidos/${pedidoId}`}
+                  className="
+                    mt-5
+                    inline-flex
+                    bg-[#211C14]
+                    px-5
+                    py-3
+                    text-sm
+                    text-white
+                    transition
+                    hover:bg-[#968052]
+                  "
+                >
+                  Ver pedido
+                </Link>
               </div>
             )}
         </section>
