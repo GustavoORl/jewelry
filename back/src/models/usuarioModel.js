@@ -23,21 +23,35 @@ export async function criarUsuarioModel(dados) {
 }
 
 export async function listarUsuariosModel() {
-  return prisma.usuario.findMany({
-    select: {
-      id: true,
-      nome: true,
-      email: true,
-      telefone: true,
-      tipo: true,
-      ativo: true,
-      criadoEm: true,
-      ultimoAcessoEm: true,
-    },
-    orderBy: {
-      criadoEm: "desc",
-    },
-  });
+    return prisma.usuario.findMany({
+        select: {
+            id: true,
+            nome: true,
+            email: true,
+            telefone: true,
+            tipo: true,
+            ativo: true,
+            criadoEm: true,
+            ultimoAcessoEm: true,
+
+            pedidos: {
+                select: {
+                    id: true,
+                    status: true,
+                    valorTotal: true,
+                    criadoEm: true,
+                },
+
+                orderBy: {
+                    criadoEm: "desc",
+                },
+            },
+        },
+
+        orderBy: {
+            criadoEm: "desc",
+        },
+    });
 }
 
 export async function buscarUsuarioPorIdModel(id) {
