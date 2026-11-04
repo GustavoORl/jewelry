@@ -1,13 +1,8 @@
+
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-
-import { apiFetch } from "../services/api.js";
-import { useAuth } from "../contexts/AuthContext.jsx";
-
+import { Link, useNavigate } from "react-router-dom";
 import {
   ArrowRight,
-  ShoppingBag,
-  Store,
   UserRound,
   Mail,
   LockKeyhole,
@@ -15,1007 +10,631 @@ import {
   ShieldCheck,
   Truck,
   Headset,
-  Gift,
   CheckCircle2,
   Eye,
   EyeOff,
+  LoaderCircle,
+  Gem,
 } from "lucide-react";
 
-import { FaGoogle, FaApple, FaFacebook} from "react-icons/fa";
+import { apiFetch } from "../services/api.js";
+import { useAuth } from "../contexts/AuthContext.jsx";
+
+// ==========================================
+// FORMATADORES E VALIDAÇÕES
+// ==========================================
+
+function formatarCpf(valor) {
+  const numeros = valor.replace(/\D/g, "").slice(0, 11);
+
+  return numeros
+    .replace(/^(\d{3})(\d)/, "$1.$2")
+    .replace(/^(\d{3})\.(\d{3})(\d)/, "$1.$2.$3")
+    .replace(/\.(\d{3})(\d)/, ".$1-$2");
+}
+
+function validarCpf(valor) {
+  const cpf = valor.replace(/\D/g, "");
+
+  if (!/^\d{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) {
+    return false;
+  }
+
+  for (let posicao = 9; posicao <= 10; posicao++) {
+    let soma = 0;
+
+    for (let indice = 0; indice < posicao; indice++) {
+      soma += Number(cpf[indice]) * (posicao + 1 - indice);
+    }
+
+    const resto = (soma * 10) % 11;
+    const digito = resto === 10 ? 0 : resto;
+
+    if (digito !== Number(cpf[posicao])) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+// ==========================================
+// COMPONENTE PRINCIPAL
+// ==========================================
 
 export default function Login() {
-
-  const [modo, setModo] = useState("cadastro");
-
-  const [perfil, setPerfil] = useState("vendedor");
-
-  const [mostrarSenha, setMostrarSenha] = useState(false);
-
-  const [aceitouTermos, setAceitouTermos] = useState(false);
-  const [carregando, setCarregando] = useState(false);
-  const [erro, setErro] = useState("");
-  const [sucesso, setSucesso] = useState("");
   const navigate = useNavigate();
   const { entrar } = useAuth();
 
+  const [modo, setModo] = useState("login");
+  const [carregando, setCarregando] = useState(false);
+
+  const [erro, setErro] = useState("");
+  const [sucesso, setSucesso] = useState("");
+
+  const [mostrarSenha, setMostrarSenha] = useState(false);
+  const [mostrarConfirmarSenha, setMostrarConfirmarSenha] = useState(false);
+  const [aceitouTermos, setAceitouTermos] = useState(false);
+
+  const [formulario, setFormulario] = useState({
+    nome: "",
+    cpf: "",
+    email: "",
+    senha: "",
+    confirmarSenha: "",
+  });
+
   const isCadastro = modo === "cadastro";
 
-  
+  // ==========================================
+  // ALTERAR CAMPOS
+  // ==========================================
 
-async function handleSubmit(e) {
-  e.preventDefault();
+  function alterarCampo(evento) {
+    const { name, value } = evento.target;
 
-  console.log("1. handleSubmit executado");
-  console.log("2. Modo cadastro:", isCadastro);
+    setFormulario((anterior) => ({
+      ...anterior,
+      [name]: name === "cpf" ? formatarCpf(value) : value,
+    }));
 
-  const formulario = e.currentTarget;
-
-  setErro("");
-  setSucesso("");
-
-  if (carregando) {
-    console.log(
-      "Envio interrompido: já existe uma requisição em andamento."
-    );
-    return;
+    setErro("");
   }
 
-  if (isCadastro && !aceitouTermos) {
-    setErro("Você precisa aceitar os termos para continuar.");
-    return;
+  // ==========================================
+  // ALTERNAR ENTRE LOGIN E CADASTRO
+  // ==========================================
+
+  function alterarModo(novoModo) {
+    if (carregando) return;
+
+    setModo(novoModo);
+    setErro("");
+    setSucesso("");
+    setMostrarSenha(false);
+    setMostrarConfirmarSenha(false);
+    setAceitouTermos(false);
+
+    setFormulario({
+      nome: "",
+      cpf: "",
+      email: "",
+      senha: "",
+      confirmarSenha: "",
+    });
   }
 
-  const campos = new FormData(formulario);
+  // ==========================================
+  // VALIDAÇÃO DO CADASTRO
+  // ==========================================
 
-  const nome = campos.get("nome")?.toString().trim();
-  const documento = campos.get("documento")?.toString().trim();
-  const email = campos.get("email")?.toString().trim();
-  const senha = campos.get("senha")?.toString();
+  function validarCadastro() {
+    if (formulario.nome.trim().length < 2) {
+      return "Informe seu nome completo.";
+    }
 
-  setCarregando(true);
+    if (formulario.cpf && !validarCpf(formulario.cpf)) {
+      return "Informe um CPF válido.";
+    }
 
-  try {
-    console.log("3. Entrando no try. Cadastro:", isCadastro);
+    if (formulario.senha.length < 8) {
+      return "Sua senha deve possuir pelo menos 8 caracteres.";
+    }
+
+    if (formulario.senha !== formulario.confirmarSenha) {
+      return "As senhas informadas não coincidem.";
+    }
+
+    if (!aceitouTermos) {
+      return "Você precisa aceitar os termos de uso e a política de privacidade.";
+    }
+
+    return null;
+  }
+
+  // ==========================================
+  // ENVIAR FORMULÁRIO
+  // ==========================================
+
+  async function handleSubmit(evento) {
+    evento.preventDefault();
+
+    if (carregando) return;
+
+    setErro("");
+    setSucesso("");
+
+    const nome = formulario.nome.trim();
+    const email = formulario.email.trim().toLowerCase();
+    const senha = formulario.senha;
+    const cpf = formulario.cpf.replace(/\D/g, "");
 
     if (isCadastro) {
-      console.log("4. Chamando endpoint /usuarios");
+      const erroValidacao = validarCadastro();
 
-      await apiFetch("/usuarios", {
+      if (erroValidacao) {
+        setErro(erroValidacao);
+        return;
+      }
+    }
+
+    try {
+      setCarregando(true);
+
+      // ======================================
+      // CADASTRO
+      // ======================================
+
+      if (isCadastro) {
+        await apiFetch("/usuario", {
+          method: "POST",
+          body: JSON.stringify({
+            nome,
+            email,
+            senha,
+            ...(cpf ? { cpfCnpj: cpf } : {}),
+          }),
+        });
+
+        setModo("login");
+
+        setFormulario({
+          nome: "",
+          cpf: "",
+          email,
+          senha: "",
+          confirmarSenha: "",
+        });
+
+        setAceitouTermos(false);
+        setMostrarSenha(false);
+        setMostrarConfirmarSenha(false);
+
+        setSucesso("Sua conta foi criada com sucesso! Agora entre com seu e-mail e senha.");
+
+        return;
+      }
+
+      // ======================================
+      // LOGIN
+      // ======================================
+
+      const resultado = await apiFetch("/entrar", {
         method: "POST",
         body: JSON.stringify({
-          nome,
           email,
           senha,
-          cpfCnpj: documento || undefined,
         }),
       });
 
-      console.log("5. Cadastro realizado com sucesso");
+      if (!resultado?.usuario) {
+        throw new Error("Não foi possível obter os dados da sua conta.");
+      }
 
-      setModo("login");
-      setSucesso("Conta criada! Entre com seu email e senha.");
+      // A sessão é mantida por cookies HTTP-Only.
+      // Não armazenamos tokens no localStorage.
 
-      formulario.reset();
-      setAceitouTermos(false);
+      entrar(resultado.usuario);
 
-      return;
+      if (resultado.usuario.tipo === "ADMIN") {
+        navigate("/admin", { replace: true });
+      } else {
+        navigate("/", { replace: true });
+      }
+    } catch (erroApi) {
+      console.error("Erro na autenticação:", erroApi);
+
+      setErro(
+        erroApi.message || "Não foi possível concluir a operação. Tente novamente."
+      );
+    } finally {
+      setCarregando(false);
     }
-
-    console.log("4. Chamando endpoint /entrar");
-
-    const resultado = await apiFetch("/entrar", {
-      method: "POST",
-      body: JSON.stringify({
-        email,
-        senha,
-      }),
-    });
-
-    console.log("5. Resposta do login:", resultado);
-
-    // Atualiza o usuário no AuthContext.
-    entrar(resultado.usuario);
-
-    setSucesso("Login realizado com sucesso!");
-
-    // A sessão é mantida pelos cookies HttpOnly.
-    // Não armazenamos tokens no localStorage ou sessionStorage.
-
-    navigate("/");
-  } catch (erroApi) {
-    console.error("Erro na autenticação:", erroApi);
-
-    setErro(
-      erroApi.message ||
-        "Não foi possível conectar ao servidor. Tente novamente."
-    );
-  } finally {
-    setCarregando(false);
   }
-}
 
-
+  // ==========================================
+  // INTERFACE
+  // ==========================================
 
   return (
-
     <main className="min-h-screen bg-[#F8F3E8] text-[#211C14]">
-
       <div className="grid min-h-screen lg:grid-cols-[1.05fr_0.95fr]">
-
         {/* PAINEL VISUAL */}
 
         <section className="relative hidden overflow-hidden bg-[#211C14] lg:flex lg:flex-col lg:justify-between lg:p-12 xl:p-16">
+          {/* LOGO */}
 
-          <a
+          <Link to="/" className="relative z-10 w-fit font-serif text-3xl tracking-[0.18em] text-[#F8F3E8]">
+            AURELIA
+          </Link>
 
-            href="/"
-
-            className="relative z-10 w-fit text-3xl tracking-[0.18em] text-[#F8F3E8]"
-
-          >
-
-            AURORA
-
-          </a>
+          {/* APRESENTAÇÃO */}
 
           <div className="relative z-10 max-w-lg">
-
             <span className="text-xs font-medium uppercase tracking-[0.3em] text-[#B9975B]">
-
-              Sua beleza, seus negócios
-
+              Elegância em cada detalhe
             </span>
 
-            <h1 className="mt-5 text-5xl leading-tight text-[#FCFAF5] xl:text-6xl">
-
-              O brilho das joias. As possibilidades de um novo começo.
-
+            <h1 className="mt-5 font-serif text-5xl leading-tight text-[#FCFAF5] xl:text-6xl">
+              Joias que iluminam sua essência.
             </h1>
 
             <p className="mt-6 max-w-md text-sm leading-7 text-[#C8BFAF]">
-
-              Descubra peças especiais ou transforme sua paixão por joias
-
-              em um negócio. Seu próximo capítulo começa aqui.
-
+              Descubra peças especiais, criadas para acompanhar seus momentos mais importantes. Na AURELIA, cada detalhe celebra sua beleza e autenticidade.
             </p>
 
+            {/* DESTAQUES */}
+
             <div className="mt-10 flex items-center gap-4">
-
-              <div className="flex -space-x-2">
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#211C14] bg-[#E5D4B7]">
-
-                  <UserRound size={17} />
-
-                </div>
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#211C14] bg-[#C4A778]">
-
-                  <ShoppingBag size={17} />
-
-                </div>
-
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-[#211C14] bg-[#F0E8D9]">
-
-                  <Store size={17} />
-
-                </div>
-
+              <div className="flex h-12 w-12 items-center justify-center rounded-full border border-[#B9975B]/40 bg-[#B9975B]/10">
+                <Gem size={23} className="text-[#D6BD87]" strokeWidth={1.5} />
               </div>
 
-              <p className="text-xs leading-5 text-[#C8BFAF]">
+              <div>
+                <p className="font-serif text-lg text-[#FCFAF5]">
+                  AURELIA Joias
+                </p>
 
-                Uma experiência especial
-
-                <br />
-
-                para quem ama joias.
-
-              </p>
-
+                <p className="mt-1 text-xs text-[#C8BFAF]">
+                  Seu brilho, sua história.
+                </p>
+              </div>
             </div>
-
           </div>
 
+          {/* RODAPÉ */}
+
           <p className="relative z-10 text-xs text-[#A69B8B]">
-
-            © 2026 AURORA. Todos os direitos reservados.
-
+            © 2026 AURELIA. Todos os direitos reservados.
           </p>
 
-          {/* Elementos decorativos */}
+          {/* ELEMENTOS DECORATIVOS */}
 
           <div className="pointer-events-none absolute -right-28 top-1/4 h-[430px] w-[430px] rounded-full border border-[#B9975B]/20" />
-
           <div className="pointer-events-none absolute -right-12 top-[32%] h-[300px] w-[300px] rounded-full border border-[#B9975B]/20" />
-
           <div className="pointer-events-none absolute bottom-20 right-16 h-32 w-32 rounded-full bg-[#B9975B]/10 blur-3xl" />
-
         </section>
 
         {/* PAINEL DO FORMULÁRIO */}
 
-        <section className="flex min-h-screen items-center justify-center px-4 py-5 sm:px-8 lg:px-6">
+        <section className="flex min-h-screen items-center justify-center px-4 py-8 sm:px-8 lg:px-6">
+          <div className="w-full max-w-[540px] rounded-[24px] border border-[#EFE5D6] bg-[#FFFEFC] px-5 py-7 shadow-sm sm:px-8 sm:py-9">
+            {/* LOGO MOBILE */}
 
-          <div className="w-full max-w-[540px] rounded-[24px] border border-[#EFE5D6] bg-[#FFFEFC] px-5 py-6 sm:px-8 sm:py-8">
+            <Link to="/" className="mb-7 block text-center font-serif text-2xl tracking-[0.18em] text-[#211C14] lg:hidden">
+              AURELIA
+            </Link>
 
-            {/* Alternância de modo */}
+            {/* ALTERNÂNCIA DE MODO */}
 
-            <div className="mt-4 grid grid-cols-2 rounded-xl border-4 border-[#F0E7D8] bg-[#F0E7D8]">
-
+            <div className="grid grid-cols-2 rounded-xl border-4 border-[#F0E7D8] bg-[#F0E7D8]">
               <button
-
                 type="button"
-
-                onClick={() => setModo("login")}
-
-                className={`rounded-lg py-2 text-xs transition ${
-
-                  !isCadastro
-
-                    ? "bg-white text-[#211C14] shadow-sm"
-
-                    : "bg-transparent text-[#6F6558]"
-
-                }`}
-
+                onClick={() => alterarModo("login")}
+                disabled={carregando}
+                className={`rounded-lg py-3 text-sm font-medium transition ${!isCadastro ? "bg-[#211C14] text-white shadow-sm" : "bg-transparent text-[#6F6558] hover:text-[#211C14]"}`}
               >
-
                 Entrar
-
               </button>
 
               <button
-
                 type="button"
-
-                onClick={() => setModo("cadastro")}
-
-                className={`rounded-lg py-2 text-xs font-semibold transition ${
-
-                  isCadastro
-
-                    ? "bg-[#203E2F] text-white shadow-sm"
-
-                    : "bg-transparent text-[#6F6558]"
-
-                }`}
-
+                onClick={() => alterarModo("cadastro")}
+                disabled={carregando}
+                className={`rounded-lg py-3 text-sm font-medium transition ${isCadastro ? "bg-[#211C14] text-white shadow-sm" : "bg-transparent text-[#6F6558] hover:text-[#211C14]"}`}
               >
-
-                {isCadastro ? "Criar conta" : "Cadastre-se"}
-
-                {isCadastro && (
-
-                  <span className="ml-2 rounded-full bg-[#F4C400] px-2 py-0.5 text-[9px] text-[#211C14]">
-
-                    Grátis
-
-                  </span>
-
-                )}
-
+                Criar conta
               </button>
-
             </div>
 
-            {/* Título */}
+            {/* TÍTULO */}
 
-            <div className="mt-6">
-
-              <h2 className="text-[25px] font-semibold leading-tight tracking-tight sm:text-[28px]">
-
-                {isCadastro
-
-                  ? "Crie sua conta e comece a vender"
-
-                  : "Bem-vindo de volta"}
-
+            <div className="mt-7">
+              <h2 className="font-serif text-[27px] leading-tight text-[#211C14] sm:text-[31px]">
+                {isCadastro ? "Crie sua conta" : "Bem-vindo de volta"}
               </h2>
 
-              <p className="mt-2 text-xs leading-5 text-[#8A7E6D]">
-
+              <p className="mt-2 text-sm leading-6 text-[#8A7E6D]">
                 {isCadastro
-
-                  ? "Leva menos de 2 minutos. Sem cartão, sem mensalidade inicial."
-
-                  : "Entre na sua conta e continue sua experiência na AURORA."}
-
+                  ? "Cadastre-se para acompanhar seus pedidos e aproveitar uma experiência exclusiva na AURELIA."
+                  : "Entre na sua conta e continue descobrindo suas joias favoritas."}
               </p>
-
             </div>
 
-            <form onSubmit={handleSubmit}>
+            {/* FORMULÁRIO */}
+
+            <form onSubmit={handleSubmit} className="mt-6">
+              {/* MENSAGENS */}
+
               {erro && (
-                <div role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                <div role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm leading-6 text-red-700">
                   {erro}
                 </div>
               )}
 
               {sucesso && (
-                <div role="status" className="mt-4 rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-800">
+                <div role="status" className="mb-5 flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm leading-6 text-emerald-800">
+                  <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
                   {sucesso}
                 </div>
               )}
 
-              {/* Perfil */}
+              {/* CAMPOS EXCLUSIVOS DO CADASTRO */}
 
               {isCadastro && (
-
-                <fieldset className="mt-5">
-
-                  <legend className="mb-2 text-[10px] font-medium">
-
-                    Quero usar como
-
-                  </legend>
-
-                  <div className="grid grid-cols-2 gap-2">
-
-                    <button
-
-                      type="button"
-
-                      onClick={() => setPerfil("comprador")}
-
-                      className={`flex min-h-[58px] items-center gap-2 rounded-xl border px-3 text-left transition ${
-
-                        perfil === "comprador"
-
-                          ? "border-[#203E2F] bg-[#F7F9F5]"
-
-                          : "border-[#EFE5D6] bg-[#FFFCF7] hover:border-[#CFC2AC]"
-
-                      }`}
-
-                    >
-
-                      <ShoppingBag
-
-                        size={19}
-
-                        className="shrink-0 text-[#82745F]"
-
-                      />
-
-                      <span>
-
-                        <span className="block text-[10px] font-medium">
-
-                          Comprar
-
-                        </span>
-
-                        <span className="mt-0.5 block text-[9px] text-[#8A7E6D]">
-
-                          Explorar ofertas
-
-                        </span>
-
-                      </span>
-
-                    </button>
-
-                    <button
-
-                      type="button"
-
-                      onClick={() => setPerfil("vendedor")}
-
-                      className={`flex min-h-[58px] items-center gap-2 rounded-xl border px-3 text-left transition ${
-
-                        perfil === "vendedor"
-
-                          ? "border-[#203E2F] bg-[#F7F9F5]"
-
-                          : "border-[#EFE5D6] bg-[#FFFCF7] hover:border-[#CFC2AC]"
-
-                      }`}
-
-                    >
-
-                      <span
-
-                        className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
-
-                          perfil === "vendedor"
-
-                            ? "bg-[#203E2F] text-white"
-
-                            : "bg-[#F0E7D8] text-[#82745F]"
-
-                        }`}
-
-                      >
-
-                        <Store size={17} />
-
-                      </span>
-
-                      <span>
-
-                        <span className="flex items-center gap-1 text-[10px] font-medium">
-
-                          Vender
-
-                          {perfil === "vendedor" && (
-
-                            <CheckCircle2
-
-                              size={11}
-
-                              className="text-[#23804A]"
-
-                            />
-
-                          )}
-
-                        </span>
-
-                        <span className="mt-0.5 block text-[9px] text-[#8A7E6D]">
-
-                          Seja um Afiliado
-
-                        </span>
-
-                      </span>
-
-                    </button>
-
-                  </div>
-
-                </fieldset>
-
-              )}
-
-              {/* Login social ilustrativo */}
-
-              <div className="mt-4 grid grid-cols-3 gap-2">
-
-                <button
-
-                  type="button"
-
-                  onClick={() =>
-
-                    alert("Login com Google será integrado futuramente.")
-
-                  }
-
-                  className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#EFE5D6] text-[10px] transition hover:bg-[#F8F3E8]"
-
-                >
-
-                <FaGoogle/>
-
-                  Google
-
-                </button>
-
-                <button
-
-                  type="button"
-
-                  onClick={() =>
-
-                    alert("Login com Apple será integrado futuramente.")
-
-                  }
-
-                  className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#EFE5D6] text-[10px] transition hover:bg-[#F8F3E8]"
-
-                >
-
-                  <FaApple size={13} />
-
-                  Apple
-
-                </button>
-
-                <button
-
-                  type="button"
-
-                  onClick={() =>
-
-                    alert("Login com Facebook será integrado futuramente.")
-
-                  }
-
-                  className="flex h-9 items-center justify-center gap-1.5 rounded-xl border border-[#EFE5D6] text-[10px] transition hover:bg-[#F8F3E8]"
-
-                >
-
-                  <FaFacebook/>
-
-                  Facebook
-
-                </button>
-
-              </div>
-
-              {/* Divisor */}
-
-              <div className="my-4 flex items-center gap-3">
-
-                <div className="h-px flex-1 bg-[#EFE5D6]" />
-
-                <span className="text-[9px] text-[#9A8D7A]">
-
-                  ou com e-mail
-
-                </span>
-
-                <div className="h-px flex-1 bg-[#EFE5D6]" />
-
-              </div>
-
-              {/* Nome e documento */}
-
-              {isCadastro && (
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {/* NOME */}
 
                   <div>
-
-                    <label
-
-                      htmlFor="nome"
-
-                      className="mb-1.5 block text-[10px] font-medium"
-
-                    >
-
-                      Nome
-
+                    <label htmlFor="nome" className="mb-2 block text-xs font-medium text-[#211C14]">
+                      Nome completo
                     </label>
 
-                    <div className="flex h-10 items-center gap-2 rounded-xl border border-[#EFE5D6] px-3 focus-within:border-[#B9975B]">
-
-                      <UserRound
-
-                        size={14}
-
-                        className="shrink-0 text-[#8A7E6D]"
-
-                      />
+                    <div className="flex h-12 items-center gap-3 rounded-xl border border-[#EFE5D6] px-3.5 transition focus-within:border-[#B9975B]">
+                      <UserRound size={17} className="shrink-0 text-[#8A7E6D]" />
 
                       <input
-
                         id="nome"
-
                         name="nome"
-
                         type="text"
-
+                        value={formulario.nome}
+                        onChange={alterarCampo}
                         autoComplete="name"
-
                         placeholder="Maria Silva"
-
                         required
-
                         minLength={2}
-
-                        className="w-full min-w-0 bg-transparent text-[10px] outline-none placeholder:text-[#A69B8B]"
-
+                        className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-[#A69B8B]"
                       />
-
                     </div>
-
                   </div>
+
+                  {/* CPF */}
 
                   <div>
-
-                    <label
-
-                      htmlFor="documento"
-
-                      className="mb-1.5 block text-[10px] font-medium"
-
-                    >
-
-                      CPF / CNPJ
-
+                    <label htmlFor="cpf" className="mb-2 block text-xs font-medium text-[#211C14]">
+                      CPF <span className="font-normal text-[#8A7E6D]">(opcional)</span>
                     </label>
 
-                    <div className="flex h-10 items-center gap-2 rounded-xl border border-[#EFE5D6] px-3 focus-within:border-[#B9975B]">
-
-                      <IdCard
-
-                        size={14}
-
-                        className="shrink-0 text-[#8A7E6D]"
-
-                      />
+                    <div className="flex h-12 items-center gap-3 rounded-xl border border-[#EFE5D6] px-3.5 transition focus-within:border-[#B9975B]">
+                      <IdCard size={17} className="shrink-0 text-[#8A7E6D]" />
 
                       <input
-
-                        id="documento"
-
-                        name="documento"
-
+                        id="cpf"
+                        name="cpf"
                         type="text"
-
+                        inputMode="numeric"
+                        value={formulario.cpf}
+                        onChange={alterarCampo}
                         autoComplete="off"
-
                         placeholder="000.000.000-00"
-
-                        required
-
-                        className="w-full min-w-0 bg-transparent text-[10px] outline-none placeholder:text-[#A69B8B]"
-
+                        maxLength={14}
+                        className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-[#A69B8B]"
                       />
-
                     </div>
-
                   </div>
-
                 </div>
-
               )}
 
-              {/* E-mail */}
+              {/* E-MAIL */}
 
-              <div className="mt-3">
-
-                <label
-
-                  htmlFor="email"
-
-                  className="mb-1.5 block text-[10px] font-medium"
-
-                >
-
+              <div className={isCadastro ? "mt-4" : ""}>
+                <label htmlFor="email" className="mb-2 block text-xs font-medium text-[#211C14]">
                   E-mail
-
                 </label>
 
-                <div className="flex h-10 items-center gap-2 rounded-xl border border-[#EFE5D6] px-3 focus-within:border-[#B9975B]">
-
-                  <Mail
-
-                    size={14}
-
-                    className="shrink-0 text-[#8A7E6D]"
-
-                  />
+                <div className="flex h-12 items-center gap-3 rounded-xl border border-[#EFE5D6] px-3.5 transition focus-within:border-[#B9975B]">
+                  <Mail size={17} className="shrink-0 text-[#8A7E6D]" />
 
                   <input
-
                     id="email"
-
                     name="email"
-
                     type="email"
-
+                    value={formulario.email}
+                    onChange={alterarCampo}
                     autoComplete="email"
-
                     placeholder="voce@email.com"
-
                     required
-
-                    className="w-full bg-transparent text-[10px] outline-none placeholder:text-[#A69B8B]"
-
+                    className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-[#A69B8B]"
                   />
-
                 </div>
-
               </div>
 
-              {/* Senha */}
+              {/* SENHA */}
 
-              <div className="mt-3">
-
-                <div className="mb-1.5 flex items-center justify-between">
-
-                  <label
-
-                    htmlFor="senha"
-
-                    className="text-[10px] font-medium"
-
-                  >
-
+              <div className="mt-4">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <label htmlFor="senha" className="text-xs font-medium text-[#211C14]">
                     Senha
-
                   </label>
 
                   {isCadastro ? (
-
-                    <span className="text-[9px] text-[#8A7E6D]">
-
+                    <span className="text-[11px] text-[#8A7E6D]">
                       Mínimo de 8 caracteres
-
                     </span>
-
                   ) : (
-
-                    <button
-
-                      type="button"
-
-                      onClick={() =>
-
-                        alert("A recuperação de senha será implementada.")
-
-                      }
-
-                      className="text-[9px] text-[#8A7E6D] underline"
-
-                    >
-
-                      Esqueci minha senha
-
-                    </button>
-
+                    <span className="text-[11px] text-[#8A7E6D]">
+                      Acesso seguro
+                    </span>
                   )}
-
                 </div>
 
-                <div className="flex h-10 items-center gap-2 rounded-xl border border-[#EFE5D6] px-3 focus-within:border-[#B9975B]">
-
-                  <LockKeyhole
-
-                    size={14}
-
-                    className="shrink-0 text-[#8A7E6D]"
-
-                  />
+                <div className="flex h-12 items-center gap-3 rounded-xl border border-[#EFE5D6] px-3.5 transition focus-within:border-[#B9975B]">
+                  <LockKeyhole size={17} className="shrink-0 text-[#8A7E6D]" />
 
                   <input
-
                     id="senha"
-
                     name="senha"
-
                     type={mostrarSenha ? "text" : "password"}
-
-                    autoComplete={
-
-                      isCadastro ? "new-password" : "current-password"
-
-                    }
-
-                    placeholder={
-
-                      isCadastro
-
-                        ? "Mínimo 8 caracteres"
-
-                        : "Digite sua senha"
-
-                    }
-
+                    value={formulario.senha}
+                    onChange={alterarCampo}
+                    autoComplete={isCadastro ? "new-password" : "current-password"}
+                    placeholder="Digite sua senha"
                     minLength={isCadastro ? 8 : undefined}
-
                     required
-
-                    className="w-full min-w-0 bg-transparent text-[10px] outline-none placeholder:text-[#A69B8B]"
-
+                    className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-[#A69B8B]"
                   />
 
                   <button
-
                     type="button"
-
-                    aria-label={
-
-                      mostrarSenha ? "Ocultar senha" : "Mostrar senha"
-
-                    }
-
-                    onClick={() => setMostrarSenha(!mostrarSenha)}
-
-                    className="shrink-0 text-[#8A7E6D]"
-
+                    onClick={() => setMostrarSenha((anterior) => !anterior)}
+                    aria-label={mostrarSenha ? "Ocultar senha" : "Mostrar senha"}
+                    className="shrink-0 rounded-md p-1 text-[#8A7E6D] transition hover:text-[#211C14]"
                   >
-
-                    {mostrarSenha ? (
-
-                      <EyeOff size={15} />
-
-                    ) : (
-
-                      <Eye size={15} />
-
-                    )}
-
+                    {mostrarSenha ? <EyeOff size={17} /> : <Eye size={17} />}
                   </button>
-
                 </div>
-
               </div>
 
-              {/* Termos */}
+              {/* CONFIRMAR SENHA */}
 
               {isCadastro && (
+                <div className="mt-4">
+                  <label htmlFor="confirmarSenha" className="mb-2 block text-xs font-medium text-[#211C14]">
+                    Confirmar senha
+                  </label>
 
-                <label className="mt-4 flex cursor-pointer items-start gap-2">
+                  <div className="flex h-12 items-center gap-3 rounded-xl border border-[#EFE5D6] px-3.5 transition focus-within:border-[#B9975B]">
+                    <LockKeyhole size={17} className="shrink-0 text-[#8A7E6D]" />
 
-                  <input
+                    <input
+                      id="confirmarSenha"
+                      name="confirmarSenha"
+                      type={mostrarConfirmarSenha ? "text" : "password"}
+                      value={formulario.confirmarSenha}
+                      onChange={alterarCampo}
+                      autoComplete="new-password"
+                      placeholder="Digite a senha novamente"
+                      minLength={8}
+                      required
+                      className="w-full min-w-0 bg-transparent text-sm outline-none placeholder:text-[#A69B8B]"
+                    />
 
-                    type="checkbox"
-
-                    checked={aceitouTermos}
-
-                    onChange={(e) =>
-
-                      setAceitouTermos(e.target.checked)
-
-                    }
-
-                    className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[#203E2F]"
-
-                  />
-
-                  <span className="text-[10px] leading-[1.6] text-[#8A7E6D]">
-
-                    Concordo com os{" "}
-
-                    <a
-
-                      href="/termos"
-
-                      className="font-medium text-[#211C14] underline"
-
+                    <button
+                      type="button"
+                      onClick={() => setMostrarConfirmarSenha((anterior) => !anterior)}
+                      aria-label={mostrarConfirmarSenha ? "Ocultar senha" : "Mostrar senha"}
+                      className="shrink-0 rounded-md p-1 text-[#8A7E6D] transition hover:text-[#211C14]"
                     >
-
-                      Termos de uso
-
-                    </a>{" "}
-
-                    e a{" "}
-
-                    <a
-
-                      href="/privacidade"
-
-                      className="font-medium text-[#211C14] underline"
-
-                    >
-
-                      Política de privacidade
-
-                    </a>
-
-                    , incluindo o recebimento de dicas de vendas.
-
-                  </span>
-
-                </label>
-
+                      {mostrarConfirmarSenha ? <EyeOff size={17} /> : <Eye size={17} />}
+                    </button>
+                  </div>
+                </div>
               )}
 
-              {/* Botão principal */}
+              {/* TERMOS */}
+
+              {isCadastro && (
+                <label className="mt-5 flex cursor-pointer items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={aceitouTermos}
+                    onChange={(evento) => setAceitouTermos(evento.target.checked)}
+                    required
+                    className="mt-1 h-4 w-4 shrink-0 accent-[#968052]"
+                  />
+
+                  <span className="text-xs leading-5 text-[#8A7E6D]">
+                    Li e concordo com os{" "}
+                    <Link to="/termos" className="font-medium text-[#211C14] underline underline-offset-2">
+                      Termos de uso
+                    </Link>{" "}
+                    e com a{" "}
+                    <Link to="/privacidade" className="font-medium text-[#211C14] underline underline-offset-2">
+                      Política de privacidade
+                    </Link>.
+                  </span>
+                </label>
+              )}
+
+              {/* BOTÃO PRINCIPAL */}
 
               <button
                 type="submit"
                 disabled={carregando}
-                className={`mt-5 flex min-h-11 w-full items-center justify-center gap-2 rounded-xl bg-[#E9522B] px-4 text-xs font-semibold text-white transition hover:bg-[#D94723] focus:outline-none focus:ring-2 focus:ring-[#E9522B]/40 focus:ring-offset-2 ${carregando ? "cursor-not-allowed opacity-70" : ""}`}
+                className="mt-6 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl bg-[#211C14] px-5 text-sm font-semibold text-white transition hover:bg-[#968052] focus:outline-none focus:ring-2 focus:ring-[#968052]/30 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                {carregando
-                  ? "Aguarde..."
-                  : isCadastro
-                    ? perfil === "vendedor"
-                      ? "Tornar-se Afiliado"
-                      : "Criar minha conta grátis"
-                    : "Entrar na minha conta"}
-
-                {!carregando && <ArrowRight size={15} />}
-
+                {carregando ? (
+                  <>
+                    <LoaderCircle size={18} className="animate-spin" />
+                    {isCadastro ? "Criando sua conta..." : "Entrando..."}
+                  </>
+                ) : (
+                  <>
+                    {isCadastro ? "Criar minha conta" : "Entrar na minha conta"}
+                    <ArrowRight size={17} />
+                  </>
+                )}
               </button>
-
             </form>
 
-            {/* Benefício promocional */}
+            {/* ALTERNÂNCIA INFERIOR */}
 
-            {isCadastro && (
+            <p className="mt-6 text-center text-xs leading-6 text-[#8A7E6D]">
+              {isCadastro ? "Já possui uma conta?" : "Ainda não possui uma conta?"}{" "}
+              <button
+                type="button"
+                onClick={() => alterarModo(isCadastro ? "login" : "cadastro")}
+                disabled={carregando}
+                className="font-semibold text-[#968052] underline-offset-2 transition hover:text-[#211C14] hover:underline"
+              >
+                {isCadastro ? "Entrar" : "Cadastre-se"}
+              </button>
+            </p>
 
-              <div className="mt-3 flex min-h-9 items-center justify-center gap-2 rounded-xl border border-dashed border-[#EFE5D6] bg-[#FFFCF7] px-2 py-2 text-center text-[9px]">
+            {/* BENEFÍCIOS */}
 
-                <Gift size={13} className="shrink-0 text-[#E9522B]" />
-
-                <span>
-
-                  <strong className="font-semibold">
-
-                    Bônus de boas-vindas:
-
-                  </strong>{" "}
-
-                  0% de comissão nos primeiros 30 dias
-
+            <div className="mt-7 grid grid-cols-3 gap-2 border-t border-[#EFE5D6] pt-6">
+              <div className="flex flex-col items-center gap-2 rounded-xl bg-[#F8F3E8] px-2 py-4 text-center">
+                <ShieldCheck size={20} className="text-[#968052]" />
+                <span className="text-[11px] leading-4 text-[#6F6558]">
+                  Compra protegida
                 </span>
-
               </div>
 
-            )}
-
-            {/* Vantagens */}
-
-            <div className="mt-4 grid grid-cols-3 gap-2">
-
-              <div className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#F2E9D8] px-2 py-2">
-
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#203E2F]">
-
-                  <ShieldCheck size={15} />
-
-                </div>
-
-                <span className="text-[9px] leading-tight">
-
-                  Pagamento
-
-                  <br />
-
-                  protegido
-
+              <div className="flex flex-col items-center gap-2 rounded-xl bg-[#F8F3E8] px-2 py-4 text-center">
+                <Truck size={20} className="text-[#968052]" />
+                <span className="text-[11px] leading-4 text-[#6F6558]">
+                  Acompanhe pedidos
                 </span>
-
               </div>
 
-              <div className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#F2E9D8] px-2 py-2">
-
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#203E2F]">
-
-                  <Truck size={15} />
-
-                </div>
-
-                <span className="text-[9px] leading-tight">
-
-                  Envio com
-
-                  <br />
-
-                  desconto
-
+              <div className="flex flex-col items-center gap-2 rounded-xl bg-[#F8F3E8] px-2 py-4 text-center">
+                <Headset size={20} className="text-[#968052]" />
+                <span className="text-[11px] leading-4 text-[#6F6558]">
+                  Atendimento
                 </span>
-
               </div>
-
-              <div className="flex min-h-[44px] items-center gap-1.5 rounded-xl bg-[#F2E9D8] px-2 py-2">
-
-                <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-white text-[#203E2F]">
-
-                  <Headset size={15} />
-
-                </div>
-
-                <span className="text-[9px] leading-tight">
-
-                  Suporte em
-
-                  <br />
-
-                  português
-
-                </span>
-
-              </div>
-
             </div>
 
-            {/* Segurança */}
+            {/* SEGURANÇA */}
 
-            <div className="mt-4 flex items-center justify-center gap-1.5 text-center text-[9px] text-[#8A7E6D]">
-
-              <LockKeyhole size={11} className="shrink-0" />
-
+            <div className="mt-5 flex items-center justify-center gap-2 text-center text-[11px] text-[#8A7E6D]">
+              <LockKeyhole size={13} />
               Seus dados são protegidos com segurança.
-
             </div>
-
           </div>
-
         </section>
-
       </div>
-
     </main>
-
   );
-
 }

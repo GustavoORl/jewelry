@@ -189,7 +189,7 @@ export async function criarPedido(
   if (
     !dadosEndereco ||
     typeof dadosEndereco !==
-      "object" ||
+    "object" ||
     Array.isArray(
       dadosEndereco
     )
@@ -226,11 +226,14 @@ export async function criarPedido(
       ),
 
     complemento:
-      validarTexto(
-        dadosEndereco.complemento,
-        "o complemento",
-        false
-      ),
+      typeof dadosEndereco.complemento === "string" &&
+        dadosEndereco.complemento.trim()
+        ? validarTexto(
+          dadosEndereco.complemento,
+          "o complemento",
+          false
+        )
+        : null,
 
     bairro:
       validarTexto(
@@ -308,7 +311,7 @@ export async function buscarPedido(
 
   if (
     typeof pedidoId !==
-      "string" ||
+    "string" ||
     !pedidoId.trim()
   ) {
     throw erro(
@@ -400,7 +403,7 @@ export async function atualizarStatus(
 
   if (
     typeof pedidoId !==
-      "string" ||
+    "string" ||
     !pedidoId.trim()
   ) {
     throw erro(
@@ -421,7 +424,7 @@ export async function atualizarStatus(
 
   if (
     typeof novoStatus !==
-      "string" ||
+    "string" ||
     !novoStatus.trim()
   ) {
     throw erro(
@@ -557,7 +560,7 @@ export async function atualizarStatus(
 
   const proximoStatusPermitido =
     transicoesAdministrativas[
-      statusAtual
+    statusAtual
     ];
 
 
@@ -612,4 +615,116 @@ export async function atualizarStatus(
 
 
   return pedidoAtualizado;
+}
+
+/**
+ * =========================================
+ * ATUALIZAR ENDEREÇO DO PEDIDO
+ * =========================================
+ */
+export async function atualizarEnderecoPedido(
+  usuarioId,
+  pedidoId,
+  dadosEndereco
+) {
+  // 1. AUTENTICAÇÃO
+
+  if (!usuarioId) {
+    throw erro("Usuário não autenticado.", 401);
+  }
+
+  // 2. VALIDAR IDENTIFICADOR
+
+  if (
+    typeof pedidoId !== "string" ||
+    !pedidoId.trim()
+  ) {
+    throw erro("Identificador do pedido inválido.");
+  }
+
+  // 3. VALIDAR ENDEREÇO
+
+  if (
+    !dadosEndereco ||
+    typeof dadosEndereco !== "object" ||
+    Array.isArray(dadosEndereco)
+  ) {
+    throw erro("Informe o endereço de entrega.");
+  }
+
+  const endereco = {
+    destinatario: validarTexto(
+      dadosEndereco.destinatario,
+      "o nome do destinatário"
+    ),
+
+    cep: validarTexto(
+      dadosEndereco.cep,
+      "o CEP"
+    ),
+
+    rua: validarTexto(
+      dadosEndereco.rua,
+      "a rua"
+    ),
+
+    numero: validarTexto(
+      dadosEndereco.numero,
+      "o número"
+    ),
+
+    complemento:
+      typeof dadosEndereco.complemento === "string" &&
+        dadosEndereco.complemento.trim()
+        ? validarTexto(
+          dadosEndereco.complemento,
+          "o complemento",
+          false
+        )
+        : null,
+
+    bairro: validarTexto(
+      dadosEndereco.bairro,
+      "o bairro"
+    ),
+
+    cidade: validarTexto(
+      dadosEndereco.cidade,
+      "a cidade"
+    ),
+
+    estado: validarTexto(
+      dadosEndereco.estado,
+      "o estado"
+    ).toUpperCase(),
+  };
+
+  // 4. VALIDAR CEP
+
+  const cepNumeros = endereco.cep.replace(/\D/g, "");
+
+  if (cepNumeros.length !== 8) {
+    throw erro("O CEP deve conter 8 dígitos.");
+  }
+
+  // 5. VALIDAR ESTADO
+
+  if (!/^[A-Z]{2}$/.test(endereco.estado)) {
+    throw erro("Informe uma sigla de estado válida.");
+  }
+
+  // 6. ATUALIZAR NO BANCO
+  //
+  // O model faz a verificação do proprietário,
+  // status e prazo dentro de uma transação.
+  // Assim evitamos alterações indevidas.
+
+  return pedidoModel.atualizarEnderecoDoPedido({
+    usuarioId,
+    pedidoId: pedidoId.trim(),
+    endereco: {
+      ...endereco,
+      cep: cepNumeros,
+    },
+  });
 }

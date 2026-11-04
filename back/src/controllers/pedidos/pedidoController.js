@@ -280,3 +280,37 @@ export async function atualizarStatus(
       });
   }
 }
+
+/**
+ * =========================================
+ * ATUALIZAR ENDEREÇO DO PEDIDO
+ * =========================================
+ */
+export async function atualizarEndereco(req, res) {
+  try {
+    const usuarioId = req.usuario.id;
+    const { pedidoId } = req.params;
+    const { endereco } = req.body;
+
+    const pedido = await pedidoService.atualizarEnderecoPedido(
+      usuarioId,
+      pedidoId,
+      endereco
+    );
+
+    return res.status(200).json({
+      sucesso: true,
+      mensagem: "Endereço de entrega atualizado com sucesso.",
+      pedido,
+    });
+  } catch (error) {
+    console.error("Erro ao atualizar endereço do pedido:", error);
+
+    return res.status(error.status || 500).json({
+      sucesso: false,
+      mensagem: error.status
+        ? error.message
+        : "Erro interno ao atualizar o endereço do pedido.",
+    });
+  }
+}

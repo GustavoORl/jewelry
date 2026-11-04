@@ -1126,3 +1126,124 @@ export async function buscarPedidosPendentesVencidos() {
     },
   });
 }
+
+/**
+ * =========================================
+ * ATUALIZAR ENDEREÇO DO PEDIDO
+ * =========================================
+ */
+export async function atualizarEnderecoDoPedido({
+  usuarioId,
+  pedidoId,
+  endereco,
+}) {
+  return prisma.$transaction(async (tx) => {
+    // 1. BUSCAR PEDIDO DO USUÁRIO
+
+    const pedido = await tx.pedido.findFirst({
+      where: {
+        id: pedidoId,
+        usuarioId,
+      },
+
+      select: {
+        id: true,
+        usuarioId: true,
+        status: true,
+        expiraEm: true,
+      },
+    });
+
+    if (!pedido) {
+      const error = new Error("Pedido não encontrado.");
+      error.status = 404;
+      throw error;
+    }
+
+    // 2. VERIFICAR STATUS
+
+    if (pedido.status !== "PENDENTE") {
+      const error = new Error(
+        "Somente pedidos pendentes podem ter o endereço alterado."
+      );
+
+      error.status = 409;
+      throw error;
+    }
+
+    // 3. VERIFICAR EXPIRAÇÃO
+
+    const agora = new Date();
+
+    if (
+      pedido.expiraEm &&
+      pedido.expiraEm <= agora
+    ) {
+      const error = new Error(
+        "O prazo de pagamento deste pedido expirou."
+      );
+
+      error.status = 409;
+      throw error;
+    }
+
+    // 4. ATUALIZAÇÃO CONDICIONAL
+    //
+    // Confere novamente o status, o proprietário
+    // e o prazo na operação de escrita.
+
+    const resultado = await tx.pedido.updateMany({
+      where: {
+        id: pedidoId,
+        usuarioId,
+        status: "PENDENTE",
+
+        OR: [
+          { expiraEm: null },
+          { expiraEm: { gt: new Date() } },
+        ],
+      },
+
+      data: {
+        destinatario: endereco.destinatario,
+
+        cepEntrega: endereco.cep,
+
+        ruaEntrega: endereco.rua,
+
+        numeroEntrega: endereco.numero,
+
+        complementoEntrega:
+          endereco.complemento || null,
+
+        bairroEntrega: endereco.bairro,
+
+        cidadeEntrega: endereco.cidade,
+
+        estadoEntrega: endereco.estado,
+      },
+    });
+
+    if (resultado.count !== 1) {
+      const error = new Error(
+        "O pedido foi atualizado, pago ou expirou durante a operação. Atualize a página e tente novamente."
+      );
+
+      error.status = 409;
+      throw error;
+    }
+
+    // 5. RETORNAR PEDIDO ATUALIZADO
+
+    return tx.pedido.findFirst({
+      where: {
+        id: pedidoId,
+        usuarioId,
+      },
+
+      include: {
+        itens: true,
+      },
+    });
+  });
+}

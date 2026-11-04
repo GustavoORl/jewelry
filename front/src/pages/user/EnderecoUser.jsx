@@ -15,6 +15,8 @@ import {
 
 import { apiFetch } from "../../services/api.js";
 
+import FaixaNavegacao from "../../components/common/FaixaNavegacao.jsx";
+
 
 const FORMULARIO_INICIAL = {
   destinatario: "",
@@ -90,7 +92,7 @@ export default function EnderecoUser() {
 
       setErro(
         erro.message ||
-          "Não foi possível carregar seus endereços."
+        "Não foi possível carregar seus endereços."
       );
     } finally {
       if (mostrarLoading) {
@@ -559,7 +561,7 @@ export default function EnderecoUser() {
 
       setErroFormulario(
         erro.message ||
-          "Não foi possível salvar o endereço."
+        "Não foi possível salvar o endereço."
       );
     } finally {
       setSalvando(false);
@@ -632,7 +634,7 @@ export default function EnderecoUser() {
 
       setErro(
         erro.message ||
-          "Não foi possível alterar o endereço principal."
+        "Não foi possível alterar o endereço principal."
       );
     } finally {
       setProcessandoId(null);
@@ -698,7 +700,7 @@ export default function EnderecoUser() {
 
       setErro(
         erro.message ||
-          "Não foi possível excluir o endereço."
+        "Não foi possível excluir o endereço."
       );
     } finally {
       setProcessandoId(null);
@@ -740,6 +742,16 @@ export default function EnderecoUser() {
 
   return (
     <main className="min-h-screen bg-[#FAF8F4]">
+      
+      <div className="w-full max-md:hidden">
+        <FaixaNavegacao
+          mostrarVoltar={false}
+          itens={[
+            { label: "Início", to: "/" },
+            { label: "Endereços" },
+          ]}
+        />
+      </div>
 
       <div className="mx-auto max-w-6xl px-5 py-10 sm:px-6 lg:px-8 lg:py-14">
 
@@ -751,17 +763,6 @@ export default function EnderecoUser() {
         <section className="mb-10 flex flex-col gap-6 border-b border-black/10 pb-8 sm:flex-row sm:items-end sm:justify-between">
 
           <div>
-
-            <div className="mb-3 flex items-center gap-2 text-[#A8864A]">
-
-              <MapPin size={17} />
-
-              <span className="text-xs font-semibold uppercase tracking-[0.22em]">
-                Minha conta
-              </span>
-
-            </div>
-
 
             <h1 className="text-3xl font-medium tracking-tight text-[#1E1E1E] sm:text-4xl">
               Meus endereços
@@ -1338,11 +1339,10 @@ function EnderecoModal({
           <div className="mt-7 border border-black/10 bg-white p-4">
 
             <label
-              className={`flex items-start gap-3 ${
-                enderecoEditando?.principal
+              className={`flex items-start gap-3 ${enderecoEditando?.principal
                   ? "cursor-default"
                   : "cursor-pointer"
-              }`}
+                }`}
             >
 
               <input
@@ -1498,11 +1498,10 @@ function EnderecoCard({
 
   return (
     <article
-      className={`relative flex min-h-[260px] flex-col bg-white p-6 transition sm:p-7 ${
-        endereco.principal
+      className={`relative flex min-h-[260px] flex-col bg-white p-6 transition sm:p-7 ${endereco.principal
           ? "border border-[#A8864A]"
           : "border border-black/10 hover:border-black/20"
-      }`}
+        }`}
     >
 
       {/* TOPO */}
@@ -1512,11 +1511,10 @@ function EnderecoCard({
         <div className="flex items-center gap-3">
 
           <div
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${
-              endereco.principal
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${endereco.principal
                 ? "bg-[#A8864A]/10 text-[#A8864A]"
                 : "bg-[#F5F3EF] text-neutral-600"
-            }`}
+              }`}
           >
 
             <Home size={18} />

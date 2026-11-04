@@ -233,7 +233,7 @@ export default function FavoritoUser() {
                       </p>
 
                       <Link
-                        to={`/produto/${produto.slug}`}
+                        to={`/produtos/${produto.id}`}
                         className="inline-block mt-4 text-[10px] uppercase tracking-widest text-[#968052] border-b border-[#968052] pb-1 hover:text-[#211C14] hover:border-[#211C14] transition"
                       >
                         Ver produto

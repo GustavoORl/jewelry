@@ -24,6 +24,8 @@ import {
     apiFetch,
 } from "../../services/api.js";
 
+import FaixaNavegacao from "../../components/common/FaixaNavegacao.jsx";
+
 
 export default function Configuracoes() {
     const navigate = useNavigate();
@@ -780,14 +782,20 @@ export default function Configuracoes() {
 
     return (
         <main className="min-h-screen bg-[#FCFAF5]">
+            <div className="max-md:hidden">
+                            <FaixaNavegacao
+                              mostrarVoltar={false}
+                              itens={[
+                                { label: "Início", to: "/" },
+                                { label: "Configurações" },
+                              ]}
+                            />
+                          </div>
             <div className="mx-auto max-w-[1240px] px-5 py-10 sm:px-6 lg:px-8 lg:py-14">
 
                 {/* Cabeçalho */}
 
                 <div className="mb-10">
-                    <p className="mb-2 text-xs font-semibold uppercase tracking-[0.2em] text-[#968052]">
-                        Minha conta
-                    </p>
 
                     <h1 className="font-serif text-3xl text-[#211C14] sm:text-4xl">
                         Configurações

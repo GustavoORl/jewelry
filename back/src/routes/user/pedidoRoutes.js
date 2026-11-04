@@ -10,4 +10,10 @@ router.get("/", pedidoController.listar);
 router.get("/:pedidoId", pedidoController.buscarPorId);
 router.post("/", pedidoController.criar);
 
+// Atualizar endereço de um pedido existente
+router.patch(
+  "/:pedidoId/endereco",
+  pedidoController.atualizarEndereco
+);
+
 export default router;
