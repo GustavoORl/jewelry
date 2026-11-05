@@ -10,6 +10,7 @@ import categoriaPublicaRoutes from "./routes/public/categoriaRoutes.js";
 import materialPublicoRoutes from "./routes/public/materialRoutes.js";
 import webhookRoutes from "./routes/public/webhookRoutes.js"
 import usuarioPublicoRoutes from "./routes/public/usuarioRoutes.js";
+import promocaoPublicoRoutes from "./routes/public/promocaoRoutes.js";
 
 import sacolaUserRoutes from "./routes/user/sacolaRoutes.js"
 import pedidoUserRoutes from "./routes/user/pedidoRoutes.js"
@@ -56,6 +57,7 @@ app.use("/usuario", usuarioPublicoRoutes);
 app.use("/produtos", produtoPublicoRoutes);
 app.use("/categorias", categoriaPublicaRoutes);
 app.use("/materiais", materialPublicoRoutes);
+app.use("/promocoes", promocaoPublicoRoutes);
 
 // Rotas Usuários logados
 app.use("/usuario", usuarioUserRoutes);

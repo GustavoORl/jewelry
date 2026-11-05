@@ -32,6 +32,7 @@ const navigation = [
   { label: "Clientes", icon: Users, to: "/admin/clientes" },
   { label: "Categorias", icon: Tags, to: "/admin/categorias" },
   { label: "Materiais", icon: Gem, to: "/admin/materiais" },
+  { label: "Promoções", icon: Tags, to: "/admin/promocoes" },
   { label: "Ir para Loja", icon: Store, to: "/" },
 ];
 

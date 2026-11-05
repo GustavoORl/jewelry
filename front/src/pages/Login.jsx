@@ -265,7 +265,7 @@ export default function Login() {
           {/* LOGO */}
 
           <Link to="/" className="relative z-10 w-fit font-serif text-3xl tracking-[0.18em] text-[#F8F3E8]">
-            AURELIA
+            AURORA
           </Link>
 
           {/* APRESENTAÇÃO */}
@@ -280,7 +280,7 @@ export default function Login() {
             </h1>
 
             <p className="mt-6 max-w-md text-sm leading-7 text-[#C8BFAF]">
-              Descubra peças especiais, criadas para acompanhar seus momentos mais importantes. Na AURELIA, cada detalhe celebra sua beleza e autenticidade.
+              Descubra peças especiais, criadas para acompanhar seus momentos mais importantes. Na AURORA, cada detalhe celebra sua beleza e autenticidade.
             </p>
 
             {/* DESTAQUES */}
@@ -292,7 +292,7 @@ export default function Login() {
 
               <div>
                 <p className="font-serif text-lg text-[#FCFAF5]">
-                  AURELIA Joias
+                  AURORA Joias
                 </p>
 
                 <p className="mt-1 text-xs text-[#C8BFAF]">
@@ -305,7 +305,7 @@ export default function Login() {
           {/* RODAPÉ */}
 
           <p className="relative z-10 text-xs text-[#A69B8B]">
-            © 2026 AURELIA. Todos os direitos reservados.
+            © 2026 AURORA. Todos os direitos reservados.
           </p>
 
           {/* ELEMENTOS DECORATIVOS */}
@@ -322,7 +322,7 @@ export default function Login() {
             {/* LOGO MOBILE */}
 
             <Link to="/" className="mb-7 block text-center font-serif text-2xl tracking-[0.18em] text-[#211C14] lg:hidden">
-              AURELIA
+              AURORA
             </Link>
 
             {/* ALTERNÂNCIA DE MODO */}
@@ -356,7 +356,7 @@ export default function Login() {
 
               <p className="mt-2 text-sm leading-6 text-[#8A7E6D]">
                 {isCadastro
-                  ? "Cadastre-se para acompanhar seus pedidos e aproveitar uma experiência exclusiva na AURELIA."
+                  ? "Cadastre-se para acompanhar seus pedidos e aproveitar uma experiência exclusiva na AURORA."
                   : "Entre na sua conta e continue descobrindo suas joias favoritas."}
               </p>
             </div>

@@ -1,4 +1,5 @@
 import { prisma } from "../config/prisma.js";
+import { adicionarPrecosPromocionais } from "../services/promocaoPrecoService.js";
 
 /**
  * =========================================
@@ -33,347 +34,432 @@ export async function buscarSacolaParaPedido(usuarioId) {
  * =========================================
  */
 
+
 export async function criarPedidoComItens({
-  usuarioId,
-  endereco,
-  itensSelecionados,
+    usuarioId,
+    endereco,
+    itensSelecionados,
 }) {
-  return prisma.$transaction(async (tx) => {
-    /**
-     * ---------------------------------------
-     * 1. BUSCAR ITENS SELECIONADOS
-     * ---------------------------------------
-     */
+    return prisma.$transaction(async (tx) => {
+        /**
+         * ---------------------------------------
+         * 1. BUSCAR ITENS SELECIONADOS
+         * ---------------------------------------
+         */
 
-    const sacola = await tx.carrinho.findUnique({
-      where: {
-        usuarioId,
-      },
-
-      include: {
-        itens: {
-          where: {
-            id: {
-              in: itensSelecionados,
-            },
-          },
-        },
-      },
-    });
-
-
-    if (
-      !sacola ||
-      sacola.itens.length === 0
-    ) {
-      const error = new Error(
-        "Nenhum dos itens selecionados foi encontrado na sua sacola."
-      );
-
-      error.status = 400;
-
-      throw error;
-    }
-
-
-    /**
-     * Garante que todos os IDs enviados
-     * realmente pertencem à sacola.
-     */
-
-    if (
-      sacola.itens.length !==
-      itensSelecionados.length
-    ) {
-      const error = new Error(
-        "Um ou mais itens selecionados não pertencem à sua sacola ou não estão mais disponíveis nela."
-      );
-
-      error.status = 400;
-
-      throw error;
-    }
-
-
-    /**
-     * ---------------------------------------
-     * 2. BUSCAR PRODUTOS
-     * ---------------------------------------
-     */
-
-    const produtos = await tx.produto.findMany({
-      where: {
-        id: {
-          in: sacola.itens.map(
-            (item) => item.produtoId
-          ),
-        },
-      },
-
-      include: {
-        categoria: true,
-      },
-    });
-
-
-    if (
-      produtos.length !==
-      sacola.itens.length
-    ) {
-      const error = new Error(
-        "Um ou mais produtos não estão mais disponíveis."
-      );
-
-      error.status = 400;
-
-      throw error;
-    }
-
-
-    const produtosPorId = new Map(
-      produtos.map(
-        (produto) => [
-          produto.id,
-          produto,
-        ]
-      )
-    );
-
-
-    /**
-     * ---------------------------------------
-     * 3. CALCULAR PEDIDO
-     * ---------------------------------------
-     */
-
-    let totalCalculado = 0;
-
-
-    const itensPedido = sacola.itens.map(
-      (item) => {
-        const produto =
-          produtosPorId.get(
-            item.produtoId
-          );
-
-
-        if (
-          !produto ||
-          !produto.ativo ||
-          !produto.categoria.ativo ||
-          produto.estoque <
-          item.quantidade
-        ) {
-          const error = new Error(
-            `O produto "${produto?.nome ??
-            "selecionado"
-            }" não está disponível na quantidade solicitada.`
-          );
-
-          error.status = 400;
-
-          throw error;
-        }
-
-
-        const precoUnitario =
-          Number(
-            produto.preco
-          );
-
-
-        totalCalculado +=
-          precoUnitario *
-          item.quantidade;
-
-
-        return {
-          idCarrinho:
-            item.id,
-
-          produtoId:
-            produto.id,
-
-          nomeProduto:
-            produto.nome,
-
-          quantidade:
-            item.quantidade,
-
-          precoUnitario,
-        };
-      }
-    );
-
-
-    /**
-     * ---------------------------------------
-     * 4. RESERVAR ESTOQUE
-     * ---------------------------------------
-     *
-     * updateMany é usado aqui porque permite
-     * fazer a atualização condicional:
-     *
-     * estoque >= quantidade
-     *
-     * Isso reduz problemas de concorrência.
-     */
-
-    for (
-      const item of itensPedido
-    ) {
-      const resultado =
-        await tx.produto.updateMany({
-          where: {
-            id:
-              item.produtoId,
-
-            ativo:
-              true,
-
-            categoria: {
-              ativo:
-                true,
+        const sacola = await tx.carrinho.findUnique({
+            where: {
+                usuarioId,
             },
 
-            estoque: {
-              gte:
-                item.quantidade,
+            include: {
+                itens: {
+                    where: {
+                        id: {
+                            in: itensSelecionados,
+                        },
+                    },
+                },
             },
-          },
-
-          data: {
-            estoque: {
-              decrement:
-                item.quantidade,
-            },
-          },
         });
 
+        if (!sacola || sacola.itens.length === 0) {
+            const error = new Error(
+                "Nenhum dos itens selecionados foi encontrado na sua sacola."
+            );
 
-      if (
-        resultado.count !== 1
-      ) {
-        const error = new Error(
-          `Estoque insuficiente ou produto indisponível: "${item.nomeProduto}".`
+            error.status = 400;
+            throw error;
+        }
+
+        /**
+         * Garante que todos os IDs enviados
+         * realmente pertencem à sacola.
+         */
+
+        if (
+            sacola.itens.length !==
+            itensSelecionados.length
+        ) {
+            const error = new Error(
+                "Um ou mais itens selecionados não pertencem à sua sacola ou não estão mais disponíveis nela."
+            );
+
+            error.status = 400;
+            throw error;
+        }
+
+        /**
+         * ---------------------------------------
+         * 2. BUSCAR PRODUTOS
+         * ---------------------------------------
+         */
+
+        const produtos = await tx.produto.findMany({
+            where: {
+                id: {
+                    in: sacola.itens.map(
+                        (item) => item.produtoId
+                    ),
+                },
+            },
+
+            include: {
+                categoria: true,
+            },
+        });
+
+        if (
+            produtos.length !==
+            sacola.itens.length
+        ) {
+            const error = new Error(
+                "Um ou mais produtos não estão mais disponíveis."
+            );
+
+            error.status = 400;
+            throw error;
+        }
+
+        /**
+         * ---------------------------------------
+         * 3. APLICAR PROMOÇÕES
+         * ---------------------------------------
+         *
+         * Reutilizamos o serviço de promoções
+         * utilizado pela listagem e pela sacola.
+         *
+         * O segundo argumento (tx) garante que
+         * a consulta aconteça dentro da transação.
+         */
+
+        const produtosComPromocao =
+            await adicionarPrecosPromocionais(
+                produtos,
+                tx
+            );
+
+        const produtosPorId = new Map(
+            produtosComPromocao.map(
+                (produto) => [
+                    produto.id,
+                    produto,
+                ]
+            )
         );
 
-        error.status = 409;
+        /**
+         * ---------------------------------------
+         * 4. CALCULAR PEDIDO
+         * ---------------------------------------
+         */
 
-        throw error;
-      }
-    }
+        let totalCentavos = 0;
 
+        const itensPedido = sacola.itens.map(
+            (item) => {
+                const produto =
+                    produtosPorId.get(
+                        item.produtoId
+                    );
 
-    /**
-     * ---------------------------------------
-     * 5. CRIAR PEDIDO
-     * ---------------------------------------
-     */
+                if (
+                    !produto ||
+                    !produto.ativo ||
+                    !produto.categoria?.ativo ||
+                    produto.estoque < item.quantidade ||
+                    !Number.isInteger(item.quantidade) ||
+                    item.quantidade < 1
+                ) {
+                    const error = new Error(
+                        `O produto "${produto?.nome ?? "selecionado"}" não está disponível na quantidade solicitada.`
+                    );
 
-    /**
- * Prazo para conclusão do pagamento.
- *
- * O estoque ficará reservado durante
- * esse período.
- */
-    const TEMPO_PAGAMENTO_MINUTOS = 30;
+                    error.status = 400;
+                    throw error;
+                }
 
-    const expiraEm = new Date(
-      Date.now() +
-      TEMPO_PAGAMENTO_MINUTOS * 60 * 1000
-    );
+                /**
+                 * PREÇO ORIGINAL
+                 */
 
+                const precoOriginalCentavos =
+                    Math.round(
+                        Number(produto.preco) * 100
+                    );
 
-    const pedido =
-  await tx.pedido.create({
-    data: {
-      usuarioId,
+                if (
+                    !Number.isSafeInteger(
+                        precoOriginalCentavos
+                    ) ||
+                    precoOriginalCentavos < 0
+                ) {
+                    const error = new Error(
+                        `O produto "${produto.nome}" possui um preço inválido.`
+                    );
 
-      status: "PENDENTE",
+                    error.status = 400;
+                    throw error;
+                }
 
-      expiraEm,
+                /**
+                 * PREÇO PROMOCIONAL
+                 */
 
-      valorTotal:
-        totalCalculado.toFixed(2),
+                const precoPromocionalCentavos =
+                    Math.round(
+                        Number(
+                            produto.precoPromocional
+                        ) * 100
+                    );
 
-      destinatario:
-        endereco.destinatario,
+                const promocaoValida =
+                    produto.emPromocao === true &&
+                    Number.isSafeInteger(
+                        precoPromocionalCentavos
+                    ) &&
+                    precoPromocionalCentavos >= 0 &&
+                    precoPromocionalCentavos <
+                        precoOriginalCentavos;
 
-      cepEntrega:
-        endereco.cep,
+                /**
+                 * PREÇO FINAL DE VENDA
+                 */
 
-      ruaEntrega:
-        endereco.rua,
+                const precoUnitarioCentavos =
+                    promocaoValida
+                        ? precoPromocionalCentavos
+                        : precoOriginalCentavos;
 
-      numeroEntrega:
-        endereco.numero,
+                /**
+                 * SUBTOTAL DO ITEM
+                 */
 
-      complementoEntrega:
-        endereco.complemento || null,
+                const subtotalCentavos =
+                    precoUnitarioCentavos *
+                    item.quantidade;
 
-      bairroEntrega:
-        endereco.bairro,
+                if (
+                    !Number.isSafeInteger(
+                        subtotalCentavos
+                    )
+                ) {
+                    const error = new Error(
+                        `Não foi possível calcular o subtotal do produto "${produto.nome}".`
+                    );
 
-      cidadeEntrega:
-        endereco.cidade,
+                    error.status = 400;
+                    throw error;
+                }
 
-      estadoEntrega:
-        endereco.estado,
+                totalCentavos += subtotalCentavos;
 
-      itens: {
-        create:
-          itensPedido.map(
-            (item) => ({
-              produtoId:
-                item.produtoId,
+                if (
+                    !Number.isSafeInteger(
+                        totalCentavos
+                    )
+                ) {
+                    const error = new Error(
+                        "O valor total do pedido ultrapassa o limite permitido."
+                    );
 
-              nomeProduto:
-                item.nomeProduto,
+                    error.status = 400;
+                    throw error;
+                }
 
-              quantidade:
-                item.quantidade,
+                const precoUnitario =
+                    precoUnitarioCentavos / 100;
 
-              precoUnitario:
-                item.precoUnitario.toFixed(2),
-            })
-          ),
-      },
-    },
+                return {
+                    idCarrinho:
+                        item.id,
 
-    include: {
-      itens: true,
-    },
-  });
+                    produtoId:
+                        produto.id,
 
+                    nomeProduto:
+                        produto.nome,
 
-    /**
-     * ---------------------------------------
-     * 6. REMOVER ITENS DA SACOLA
-     * ---------------------------------------
-     *
-     * Remove somente os itens utilizados
-     * neste pedido.
-     */
+                    quantidade:
+                        item.quantidade,
 
-    await tx.itemCarrinho.deleteMany({
-      where: {
-        id: {
-          in:
-            itensPedido.map(
-              (item) =>
-                item.idCarrinho
-            ),
-        },
+                    precoUnitario,
+                };
+            }
+        );
 
-        carrinhoId:
-          sacola.id,
-      },
+        /**
+         * ---------------------------------------
+         * 5. RESERVAR ESTOQUE
+         * ---------------------------------------
+         *
+         * updateMany permite uma atualização
+         * condicional, garantindo:
+         *
+         * estoque >= quantidade
+         *
+         * Isso reduz problemas de concorrência.
+         */
+
+        for (const item of itensPedido) {
+            const resultado =
+                await tx.produto.updateMany({
+                    where: {
+                        id:
+                            item.produtoId,
+
+                        ativo:
+                            true,
+
+                        categoria: {
+                            ativo:
+                                true,
+                        },
+
+                        estoque: {
+                            gte:
+                                item.quantidade,
+                        },
+                    },
+
+                    data: {
+                        estoque: {
+                            decrement:
+                                item.quantidade,
+                        },
+                    },
+                });
+
+            if (
+                resultado.count !== 1
+            ) {
+                const error = new Error(
+                    `Estoque insuficiente ou produto indisponível: "${item.nomeProduto}".`
+                );
+
+                error.status = 409;
+                throw error;
+            }
+        }
+
+        /**
+         * ---------------------------------------
+         * 6. CRIAR PEDIDO
+         * ---------------------------------------
+         *
+         * O estoque ficará reservado durante
+         * o prazo para conclusão do pagamento.
+         */
+
+        const TEMPO_PAGAMENTO_MINUTOS = 30;
+
+        const expiraEm = new Date(
+            Date.now() +
+            TEMPO_PAGAMENTO_MINUTOS * 60 * 1000
+        );
+
+        const pedido =
+            await tx.pedido.create({
+                data: {
+                    usuarioId,
+
+                    status: "PENDENTE",
+
+                    expiraEm,
+
+                    /**
+                     * Valor total com promoções.
+                     */
+
+                    valorTotal:
+                        (totalCentavos / 100).toFixed(2),
+
+                    destinatario:
+                        endereco.destinatario,
+
+                    cepEntrega:
+                        endereco.cep,
+
+                    ruaEntrega:
+                        endereco.rua,
+
+                    numeroEntrega:
+                        endereco.numero,
+
+                    complementoEntrega:
+                        endereco.complemento || null,
+
+                    bairroEntrega:
+                        endereco.bairro,
+
+                    cidadeEntrega:
+                        endereco.cidade,
+
+                    estadoEntrega:
+                        endereco.estado,
+
+                    /**
+                     * Registra o preço efetivo
+                     * de cada produto no pedido.
+                     */
+
+                    itens: {
+                        create:
+                            itensPedido.map(
+                                (item) => ({
+                                    produtoId:
+                                        item.produtoId,
+
+                                    nomeProduto:
+                                        item.nomeProduto,
+
+                                    quantidade:
+                                        item.quantidade,
+
+                                    precoUnitario:
+                                        item.precoUnitario.toFixed(2),
+                                })
+                            ),
+                    },
+                },
+
+                include: {
+                    itens: true,
+                },
+            });
+
+        /**
+         * ---------------------------------------
+         * 7. REMOVER ITENS DA SACOLA
+         * ---------------------------------------
+         *
+         * Remove somente os itens utilizados
+         * neste pedido.
+         */
+
+        await tx.itemCarrinho.deleteMany({
+            where: {
+                id: {
+                    in:
+                        itensPedido.map(
+                            (item) =>
+                                item.idCarrinho
+                        ),
+                },
+
+                carrinhoId:
+                    sacola.id,
+            },
+        });
+
+        /**
+         * ---------------------------------------
+         * 8. RETORNAR PEDIDO
+         * ---------------------------------------
+         */
+
+        return pedido;
     });
-
-
-    return pedido;
-  });
 }
 
 

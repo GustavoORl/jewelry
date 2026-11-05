@@ -32,7 +32,7 @@ export default function ModalAutenticacao({
       icone: UserRound,
       titulo: "Faça parte da nossa experiência",
       descricao:
-        "Entre na sua conta ou cadastre-se para aproveitar todos os benefícios da AURELIA.",
+        "Entre na sua conta ou cadastre-se para aproveitar todos os benefícios da AURORA.",
     },
   };
 
@@ -102,7 +102,7 @@ export default function ModalAutenticacao({
           </Link>
 
           <Link
-            to="/cadastro"
+            to="/login"
             onClick={onFechar}
             className="flex min-h-12 w-full items-center justify-center gap-3 border border-[#DCCDB5] px-5 py-4 text-xs uppercase tracking-[0.18em] text-[#211C14] transition hover:border-[#968052] hover:bg-[#F3EDE2]"
           >

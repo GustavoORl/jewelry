@@ -11,6 +11,11 @@ import {
   listarProdutosAdmin
 } from "../models/produtoModel.js";
 
+import {
+    adicionarPrecosPromocionais,
+    adicionarPrecoPromocional,
+} from "./promocaoPrecoService.js";
+
 const incluirDetalhesProduto = {
   categoria: true,
   imagens: {
@@ -234,20 +239,27 @@ export async function criarProduto(dados, arquivos = []) {
 }
 
 
-// Lista os produtos ativos.
 export async function listarProdutos() {
-  return listarProdutosModel();
+    const produtos = await listarProdutosModel();
+
+    return adicionarPrecosPromocionais(produtos);
 }
 
-// Lista todos os produtos.
 export async function listarAllProdutosAdmin() {
-  return listarProdutosAdmin();
+    const produtos = await listarProdutosAdmin();
+
+    return adicionarPrecosPromocionais(produtos);
 }
 
 
-// Busca um produto pelo ID.
 export async function buscarProdutoPorId(id) {
-  return buscarProdutoPorIdModel(id);
+    const produto = await buscarProdutoPorIdModel(id);
+
+    if (!produto) {
+        return null;
+    }
+
+    return adicionarPrecoPromocional(produto);
 }
 
 // Exclui o produto e tenta remover suas imagens do Storage.

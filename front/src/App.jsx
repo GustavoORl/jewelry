@@ -31,6 +31,7 @@ import AdminPedidos from "./pages/admin/AdminPedidos.jsx";
 import AdminClientes from "./pages/admin/AdminClientes.jsx";
 import AdminCategorias from "./pages/admin/AdminCategorias.jsx";
 import AdminMateriais from "./pages/admin/AdminMateriais.jsx";
+import AdminPromocoes from "./pages/admin/AdminPromocoes.jsx";
 
 
 import { ocultarCapa } from "./utils/LoadingScreen.js";
@@ -76,11 +77,11 @@ export default function App() {
             <Route path="/pedidos/:pedidoId" element={<PedidoDetalhado />} />
             <Route path="/favoritos" element={<FavoritoUser />} />
             <Route path="/pagamento/:pedidoId" element={<Pagamento />} />
-            <Route path="/pedidos/:pedidoId/confirmado" element={<PedidoConfirmado />}/>
-            <Route path="/enderecos" element={<EnderecoUser />}/>
-            <Route path="/historico-compras" element={<HistoricoCompras />}/>
-            <Route path="/configuracoes" element={<Configuracoes />}/>
-            <Route path="/perfil" element={<PerfilUser />}/>
+            <Route path="/pedidos/:pedidoId/confirmado" element={<PedidoConfirmado />} />
+            <Route path="/enderecos" element={<EnderecoUser />} />
+            <Route path="/historico-compras" element={<HistoricoCompras />} />
+            <Route path="/configuracoes" element={<Configuracoes />} />
+            <Route path="/perfil" element={<PerfilUser />} />
           </Route>
 
           {/* Login */}
@@ -118,6 +119,11 @@ export default function App() {
               <Route
                 path="materiais"
                 element={<AdminMateriais />}
+              />
+
+              <Route
+                path="promocoes"
+                element={<AdminPromocoes />}
               />
             </Route>
           </Route>

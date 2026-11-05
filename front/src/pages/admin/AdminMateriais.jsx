@@ -118,7 +118,7 @@ function ModalMaterial({
 
             <div>
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-[#968052]">
-                Catálogo AURELIA
+                Catálogo AURORA
               </p>
 
               <h2
@@ -628,7 +628,7 @@ export default function AdminMateriais() {
                     Carregando materiais...
                   </p>
                   <p className="mt-1 text-xs text-[#81786A]">
-                    Consultando o catálogo da AURELIA.
+                    Consultando o catálogo da AURORA.
                   </p>
                 </div>
               </div>
@@ -848,7 +848,7 @@ export default function AdminMateriais() {
           </section>
 
           <p className="mt-5 text-center text-xs text-[#A59A87]">
-            AURELIA · Administração do catálogo
+            AURORA · Administração do catálogo
           </p>
         </main>
       </div>

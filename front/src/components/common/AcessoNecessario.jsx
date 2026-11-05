@@ -29,7 +29,7 @@ export default function AcessoNecessario({
 
         {/* Conteúdo */}
         <span className="text-[10px] uppercase tracking-[0.25em] text-[#968052]">
-          AURELIA
+          AURORA
         </span>
 
         <h1 className="text-2xl md:text-3xl font-serif text-[#211C14] mt-3">
@@ -38,7 +38,7 @@ export default function AcessoNecessario({
 
         <p className="text-sm leading-relaxed text-[#77716A] mt-4 mb-8">
           {descricao ||
-            "Entre na sua conta para acessar seus produtos e aproveitar todos os recursos da AURELIA."}
+            "Entre na sua conta para acessar seus produtos e aproveitar todos os recursos da AURORA."}
         </p>
 
         {/* Ações */}
@@ -52,7 +52,7 @@ export default function AcessoNecessario({
           </Link>
 
           <Link
-            to="/cadastro"
+            to="/login"
             className="w-full flex items-center justify-center gap-2 border border-[#D9CCB4] text-[#211C14] py-3.5 px-6 text-xs uppercase tracking-[0.15em] hover:bg-[#F1EDE5] transition-colors"
           >
             <UserPlus size={16} />

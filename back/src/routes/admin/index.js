@@ -7,8 +7,9 @@ import usuarioRoutes from "./usuarioRoutes.js";
 import produtoRoutes from "./produtoRoutes.js";
 import categoriaRoutes from "./categoriaRoutes.js";
 import materialRoutes from "./materialRoutes.js";
-import pedidoRoutes from "./pedidoRoutes.js"
-import dashboardRoutes from "./dashboardRoutes.js"
+import pedidoRoutes from "./pedidoRoutes.js";
+import dashboardRoutes from "./dashboardRoutes.js";
+import promocaoRoutes from "./promocaoRoutes.js";
 
 const router = Router();
 
@@ -21,5 +22,6 @@ router.use("/categorias", categoriaRoutes);
 router.use("/materiais", materialRoutes);
 router.use("/pedidos", pedidoRoutes)
 router.use("/dashboard", dashboardRoutes);
+router.use("/promocao", promocaoRoutes);
 
 export default router;

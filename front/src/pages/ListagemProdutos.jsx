@@ -1,3 +1,4 @@
+
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import {
@@ -14,8 +15,16 @@ import ModalAutenticacao from "../components/common/ModalAutenticacao";
 import { useAuth } from "../contexts/AuthContext";
 import { apiFetch } from "../services/api.js";
 
+// ============================================================
+// CONFIGURAÇÕES
+// ============================================================
+
 const imagemPadrao =
     "https://images.unsplash.com/photo-1617038220319-276d3cfab638?auto=format&fit=crop&w=600&q=80";
+
+// ============================================================
+// FUNÇÕES AUXILIARES
+// ============================================================
 
 function normalizarNome(nome = "") {
     const normalizado = String(nome)
@@ -55,6 +64,33 @@ function formatarPreco(valor) {
     });
 }
 
+function obterPrecoVenda(produto) {
+    const precoOriginal = Number(produto.preco);
+    const precoPromocional = Number(produto.precoPromocional);
+
+    if (
+        produto.emPromocao === true &&
+        Number.isFinite(precoPromocional) &&
+        precoPromocional >= 0 &&
+        precoPromocional < precoOriginal
+    ) {
+        return precoPromocional;
+    }
+
+    return precoOriginal;
+}
+
+function produtoEstaEmPromocao(produto) {
+    const precoOriginal = Number(produto.preco);
+    const precoVenda = obterPrecoVenda(produto);
+
+    return (
+        Number.isFinite(precoOriginal) &&
+        Number.isFinite(precoVenda) &&
+        precoVenda < precoOriginal
+    );
+}
+
 function normalizarProduto(produto) {
     const imagens = Array.isArray(produto.imagens)
         ? produto.imagens
@@ -68,29 +104,49 @@ function normalizarProduto(produto) {
 
     return {
         ...produto,
+
         imagem:
             imagens.find((item) => item?.url)?.url ||
             produto.imagem ||
             produto.imagemUrl ||
             imagemPadrao,
+
         categoriaNome:
             typeof produto.categoria === "string"
                 ? produto.categoria
                 : produto.categoria?.nome || "",
+
         materiais,
-        marca: produto.marca || "AURELIA",
+
+        marca: produto.marca || "AURORA",
+
         avaliacoes: produto.avaliacoes ?? 0,
+
         ativo: produto.ativo !== false,
     };
 }
 
 function extrairLista(resultado, chave) {
     if (Array.isArray(resultado)) return resultado;
-    if (Array.isArray(resultado?.[chave])) return resultado[chave];
-    if (Array.isArray(resultado?.dados)) return resultado.dados;
+
+    if (Array.isArray(resultado?.[chave])) {
+        return resultado[chave];
+    }
+
+    if (Array.isArray(resultado?.dados?.[chave])) {
+        return resultado.dados[chave];
+    }
+
+    if (Array.isArray(resultado?.dados)) {
+        return resultado.dados;
+    }
 
     return [];
 }
+
+// ============================================================
+// CARD DE PRODUTO
+// ============================================================
 
 function CardProduto({
     produto,
@@ -100,8 +156,21 @@ function CardProduto({
     processandoFavorito,
     processandoSacola,
 }) {
+    const precoOriginal = Number(produto.preco);
+    const precoVenda = obterPrecoVenda(produto);
+
+    const emPromocao = produtoEstaEmPromocao(produto);
+
+    const percentualDesconto = emPromocao
+        ? Math.round(
+            ((precoOriginal - precoVenda) / precoOriginal) * 100
+        )
+        : 0;
+
     return (
         <article className="group overflow-hidden rounded-2xl border border-[#EAE0CE] bg-white transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-[#211C14]/5">
+            {/* Imagem */}
+
             <div className="relative aspect-[4/4.5] overflow-hidden bg-[#F7F2E8]">
                 <Link
                     to={`/produtos/${produto.id}`}
@@ -113,7 +182,9 @@ function CardProduto({
                         alt={produto.nome}
                         loading="lazy"
                         onError={(event) => {
-                            if (event.currentTarget.src !== imagemPadrao) {
+                            if (
+                                event.currentTarget.src !== imagemPadrao
+                            ) {
                                 event.currentTarget.src = imagemPadrao;
                             }
                         }}
@@ -121,11 +192,23 @@ function CardProduto({
                     />
                 </Link>
 
-                {produto.desconto && (
-                    <span className="absolute left-3 top-3 rounded-full bg-white/95 px-3 py-1.5 text-[10px] font-medium text-[#211C14]">
-                        {produto.desconto}
-                    </span>
+                {/* Selo promocional */}
+
+                {emPromocao && (
+                    <div className="absolute left-3 top-3 flex flex-col items-start gap-2">
+                        <span className="rounded-full bg-[#211C14] px-3 py-1.5 text-[10px] font-semibold tracking-wide text-white shadow-sm">
+                            {percentualDesconto}% OFF
+                        </span>
+
+                        {produto.promocao?.nome && (
+                            <span className="max-w-[160px] truncate rounded-full bg-white/95 px-3 py-1.5 text-[10px] font-medium text-[#968052] shadow-sm">
+                                {produto.promocao.nome}
+                            </span>
+                        )}
+                    </div>
                 )}
+
+                {/* Favoritos */}
 
                 <button
                     type="button"
@@ -137,11 +220,10 @@ function CardProduto({
                             : "Adicionar aos favoritos"
                     }
                     aria-pressed={favorito}
-                    className={`absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border bg-white/95 transition-colors disabled:cursor-wait disabled:opacity-50 ${
-                        favorito
+                    className={`absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full border bg-white/95 transition-colors disabled:cursor-wait disabled:opacity-50 ${favorito
                             ? "border-[#B9975B] text-[#A47B43]"
                             : "border-[#E8DDCA] text-[#211C14] hover:border-[#B9975B]"
-                    }`}
+                        }`}
                 >
                     <Heart
                         size={18}
@@ -149,6 +231,8 @@ function CardProduto({
                     />
                 </button>
             </div>
+
+            {/* Informações */}
 
             <div className="p-4 sm:p-5">
                 <p className="mb-2 text-[9px] font-medium uppercase tracking-[0.2em] text-[#9B805D]">
@@ -168,10 +252,36 @@ function CardProduto({
                     </p>
                 )}
 
-                <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                    <span className="text-base font-semibold text-[#211C14]">
-                        {formatarPreco(produto.preco)}
-                    </span>
+
+                {/* Preços e sacola */}
+
+                <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+                    <div className="flex min-w-0 flex-col gap-1">
+
+                        {/* PREÇO ORIGINAL - ESPAÇO RESERVADO */}
+
+                        <span
+                            className={`text-xs leading-4 ${emPromocao
+                                    ? "text-[#958777] line-through decoration-[#B9A998]"
+                                    : "invisible"
+                                }`}
+                        >
+                            {formatarPreco(precoOriginal)}
+                        </span>
+
+                        {/* PREÇO DE VENDA */}
+
+                        <span
+                            className={`text-base font-semibold leading-6 ${emPromocao
+                                    ? "text-[#211c14]"
+                                    : "text-[#211C14]"
+                                }`}
+                        >
+                            {formatarPreco(precoVenda)}
+                        </span>
+                    </div>
+
+                    {/* ADICIONAR À SACOLA */}
 
                     <button
                         type="button"
@@ -181,58 +291,97 @@ function CardProduto({
                         className="inline-flex items-center gap-2 rounded-full bg-[#211C14] px-3.5 py-2.5 text-xs font-medium text-white transition-colors hover:bg-[#4A3D2B] active:scale-95 disabled:cursor-wait disabled:opacity-50"
                     >
                         <ShoppingBag size={14} />
+
                         {processandoSacola
                             ? "Adicionando..."
                             : "Adicionar"}
                     </button>
                 </div>
+
             </div>
         </article>
     );
 }
+
+// ============================================================
+// PÁGINA DE LISTAGEM
+// ============================================================
 
 export default function ListagemProdutos() {
     const [searchParams, setSearchParams] = useSearchParams();
 
     const { usuario, carregandoAuth } = useAuth();
 
+    // ========================================================
+    // PARÂMETROS DA URL
+    // ========================================================
+
     const buscaUrl = searchParams.get("busca") || "";
     const categoriaUrl = searchParams.get("categoria") || "";
+    const promocaoUrl = searchParams.get("promocao") || "";
+
+    // ========================================================
+    // ESTADOS
+    // ========================================================
 
     const [produtos, setProdutos] = useState([]);
     const [categorias, setCategorias] = useState([]);
     const [materiais, setMateriais] = useState([]);
 
     const [busca, setBusca] = useState(buscaUrl);
+
     const [categoriaAtiva, setCategoriaAtiva] = useState("Todas");
+
     const [materialAtivo, setMaterialAtivo] = useState("Todos");
+
+    const [promocaoAtiva, setPromocaoAtiva] = useState(() => {
+        return ["sim", "nao"].includes(promocaoUrl)
+            ? promocaoUrl
+            : "todos";
+    });
+
     const [ordenacao, setOrdenacao] = useState("recentes");
 
     const [favoritos, setFavoritos] = useState([]);
     const [sacola, setSacola] = useState([]);
 
     const [mostrarFiltros, setMostrarFiltros] = useState(false);
+
     const [carregando, setCarregando] = useState(true);
     const [erro, setErro] = useState("");
 
-    const [processandoFavoritos, setProcessandoFavoritos] = useState([]);
-    const [processandoSacola, setProcessandoSacola] = useState([]);
+    const [processandoFavoritos, setProcessandoFavoritos] =
+        useState([]);
+
+    const [processandoSacola, setProcessandoSacola] =
+        useState([]);
+
     const [mensagem, setMensagem] = useState("");
 
-    // Modal de autenticação.
+    // Modal de autenticação
 
-    const [modalAutenticacao, setModalAutenticacao] = useState(false);
-    const [motivoAutenticacao, setMotivoAutenticacao] = useState("geral");
+    const [modalAutenticacao, setModalAutenticacao] =
+        useState(false);
+
+    const [motivoAutenticacao, setMotivoAutenticacao] =
+        useState("geral");
 
     function abrirModalAutenticacao(motivo) {
         setMotivoAutenticacao(motivo);
         setModalAutenticacao(true);
     }
 
+    // ========================================================
+    // CATEGORIAS DISPONÍVEIS
+    // ========================================================
+
     const categoriasDisponiveis = useMemo(() => {
         const nomes = [
             ...categorias.map((categoria) => categoria.nome),
-            ...produtos.map((produto) => produto.categoriaNome),
+
+            ...produtos.map(
+                (produto) => produto.categoriaNome
+            ),
         ].filter(Boolean);
 
         return [...new Set(nomes)].sort((a, b) =>
@@ -240,11 +389,18 @@ export default function ListagemProdutos() {
         );
     }, [categorias, produtos]);
 
+    // ========================================================
+    // MATERIAIS DISPONÍVEIS
+    // ========================================================
+
     const materiaisDisponiveis = useMemo(() => {
         const nomes = [
             ...materiais.map((material) => material.nome),
+
             ...produtos.flatMap((produto) =>
-                produto.materiais.map((material) => material.nome)
+                produto.materiais.map(
+                    (material) => material.nome
+                )
             ),
         ].filter(Boolean);
 
@@ -253,7 +409,9 @@ export default function ListagemProdutos() {
         );
     }, [materiais, produtos]);
 
-    // Carregar produtos, categorias e materiais.
+    // ========================================================
+    // CARREGAR PRODUTOS, CATEGORIAS E MATERIAIS
+    // ========================================================
 
     const carregarDados = useCallback(async () => {
         try {
@@ -287,7 +445,9 @@ export default function ListagemProdutos() {
 
             setProdutos(
                 listaProdutos
-                    .filter((produto) => produto.ativo !== false)
+                    .filter(
+                        (produto) => produto.ativo !== false
+                    )
                     .map(normalizarProduto)
             );
 
@@ -312,7 +472,9 @@ export default function ListagemProdutos() {
         }
     }, []);
 
-    // Carregar favoritos do usuário autenticado.
+    // ========================================================
+    // CARREGAR FAVORITOS
+    // ========================================================
 
     const carregarFavoritos = useCallback(async () => {
         if (!usuario) {
@@ -322,12 +484,17 @@ export default function ListagemProdutos() {
 
         try {
             const resultado = await apiFetch("/favoritos");
-            const lista = extrairLista(resultado, "favoritos");
+
+            const lista = extrairLista(
+                resultado,
+                "favoritos"
+            );
 
             setFavoritos(
                 lista
                     .map((item) => {
-                        const produto = item?.produto || item;
+                        const produto =
+                            item?.produto || item;
 
                         return (
                             produto?.id ||
@@ -338,10 +505,18 @@ export default function ListagemProdutos() {
                     .filter(Boolean)
             );
         } catch (error) {
-            console.error("Erro ao carregar favoritos:", error);
+            console.error(
+                "Erro ao carregar favoritos:",
+                error
+            );
+
             setFavoritos([]);
         }
     }, [usuario]);
+
+    // ========================================================
+    // EFEITOS
+    // ========================================================
 
     useEffect(() => {
         carregarDados();
@@ -381,6 +556,16 @@ export default function ListagemProdutos() {
         setBusca(buscaUrl);
     }, [buscaUrl]);
 
+    // Sincronizar promoção com a URL.
+
+    useEffect(() => {
+        setPromocaoAtiva(
+            ["sim", "nao"].includes(promocaoUrl)
+                ? promocaoUrl
+                : "todos"
+        );
+    }, [promocaoUrl]);
+
     // Selecionar categoria informada na URL.
 
     useEffect(() => {
@@ -389,30 +574,48 @@ export default function ListagemProdutos() {
             return;
         }
 
-        const slugUrl = gerarSlugCategoria(categoriaUrl);
+        const slugUrl = gerarSlugCategoria(
+            categoriaUrl
+        );
 
-        const categoriaEncontrada = categorias.find((categoria) => {
-            const slugCategoria = gerarSlugCategoria(
-                categoria.slug || categoria.nome || ""
-            );
+        const categoriaEncontrada = categorias.find(
+            (categoria) => {
+                const slugCategoria = gerarSlugCategoria(
+                    categoria.slug ||
+                    categoria.nome ||
+                    ""
+                );
 
-            return slugCategoria === slugUrl;
-        });
+                return slugCategoria === slugUrl;
+            }
+        );
 
         if (categoriaEncontrada) {
-            setCategoriaAtiva(categoriaEncontrada.nome);
+            setCategoriaAtiva(
+                categoriaEncontrada.nome
+            );
             return;
         }
 
-        const categoriaPorNome = categoriasDisponiveis.find(
-            (nome) =>
-                normalizarNome(nome) === normalizarNome(categoriaUrl)
+        const categoriaPorNome =
+            categoriasDisponiveis.find(
+                (nome) =>
+                    normalizarNome(nome) ===
+                    normalizarNome(categoriaUrl)
+            );
+
+        setCategoriaAtiva(
+            categoriaPorNome || "Todas"
         );
+    }, [
+        categoriaUrl,
+        categorias,
+        categoriasDisponiveis,
+    ]);
 
-        setCategoriaAtiva(categoriaPorNome || "Todas");
-    }, [categoriaUrl, categorias, categoriasDisponiveis]);
-
-    // Alternar favorito.
+    // ========================================================
+    // ALTERNAR FAVORITO
+    // ========================================================
 
     async function alternarFavorito(produtoId) {
         if (!usuario) {
@@ -420,7 +623,11 @@ export default function ListagemProdutos() {
             return;
         }
 
-        if (processandoFavoritos.includes(produtoId)) return;
+        if (
+            processandoFavoritos.includes(produtoId)
+        ) {
+            return;
+        }
 
         setProcessandoFavoritos((atuais) => [
             ...atuais,
@@ -431,23 +638,33 @@ export default function ListagemProdutos() {
 
         try {
             if (favoritos.includes(produtoId)) {
-                await apiFetch(`/favoritos/${produtoId}`, {
-                    method: "DELETE",
-                });
+                await apiFetch(
+                    `/favoritos/${produtoId}`,
+                    {
+                        method: "DELETE",
+                    }
+                );
 
                 setFavoritos((atuais) =>
-                    atuais.filter((id) => id !== produtoId)
+                    atuais.filter(
+                        (id) => id !== produtoId
+                    )
                 );
 
                 window.dispatchEvent(
                     new Event("favoritosAtualizados")
                 );
 
-                setMensagem("Produto removido dos favoritos.");
+                setMensagem(
+                    "Produto removido dos favoritos."
+                );
             } else {
-                await apiFetch(`/favoritos/${produtoId}`, {
-                    method: "POST",
-                });
+                await apiFetch(
+                    `/favoritos/${produtoId}`,
+                    {
+                        method: "POST",
+                    }
+                );
 
                 setFavoritos((atuais) =>
                     atuais.includes(produtoId)
@@ -459,23 +676,30 @@ export default function ListagemProdutos() {
                     new Event("favoritosAtualizados")
                 );
 
-                setMensagem("Produto adicionado aos favoritos.");
+                setMensagem(
+                    "Produto adicionado aos favoritos."
+                );
             }
         } catch (error) {
             setMensagem(
-                error.status === 401 || error.status === 403
+                error.status === 401 ||
+                    error.status === 403
                     ? "Entre na sua conta para favoritar produtos."
                     : error.message ||
                     "Não foi possível atualizar seus favoritos."
             );
         } finally {
             setProcessandoFavoritos((atuais) =>
-                atuais.filter((id) => id !== produtoId)
+                atuais.filter(
+                    (id) => id !== produtoId
+                )
             );
         }
     }
 
-    // Adicionar produto à sacola.
+    // ========================================================
+    // ADICIONAR À SACOLA
+    // ========================================================
 
     async function adicionarSacola(produtoId) {
         if (!usuario) {
@@ -483,7 +707,11 @@ export default function ListagemProdutos() {
             return;
         }
 
-        if (processandoSacola.includes(produtoId)) return;
+        if (
+            processandoSacola.includes(produtoId)
+        ) {
+            return;
+        }
 
         setProcessandoSacola((atuais) => [
             ...atuais,
@@ -501,71 +729,119 @@ export default function ListagemProdutos() {
                 }),
             });
 
-            setSacola((atuais) => [...atuais, produtoId]);
+            setSacola((atuais) => [
+                ...atuais,
+                produtoId,
+            ]);
 
             window.dispatchEvent(
                 new Event("carrinhoAtualizado")
             );
 
-            setMensagem("Produto adicionado à sacola!");
+            setMensagem(
+                "Produto adicionado à sacola!"
+            );
         } catch (error) {
             setMensagem(
-                error.status === 401 || error.status === 403
+                error.status === 401 ||
+                    error.status === 403
                     ? "Entre na sua conta para adicionar produtos à sacola."
                     : error.message ||
                     "Não foi possível adicionar o produto à sacola."
             );
         } finally {
             setProcessandoSacola((atuais) =>
-                atuais.filter((id) => id !== produtoId)
+                atuais.filter(
+                    (id) => id !== produtoId
+                )
             );
         }
     }
 
-    // Filtrar e ordenar produtos.
+    // ========================================================
+    // FILTRAR E ORDENAR PRODUTOS
+    // ========================================================
 
     const produtosFiltrados = useMemo(() => {
-        const resultado = produtos.filter((produto) => {
-            const nomeProduto = (produto.nome || "")
-                .toLocaleLowerCase("pt-BR");
+        const resultado = produtos.filter(
+            (produto) => {
+                const nomeProduto = (
+                    produto.nome || ""
+                ).toLocaleLowerCase("pt-BR");
 
-            const termoBusca = busca
-                .trim()
-                .toLocaleLowerCase("pt-BR");
+                const termoBusca = busca
+                    .trim()
+                    .toLocaleLowerCase("pt-BR");
 
-            const correspondeBusca =
-                nomeProduto.includes(termoBusca);
+                // Busca
 
-            const correspondeCategoria =
-                categoriaAtiva === "Todas" ||
-                normalizarNome(produto.categoriaNome) ===
-                normalizarNome(categoriaAtiva);
+                const correspondeBusca =
+                    nomeProduto.includes(termoBusca);
 
-            const correspondeMaterial =
-                materialAtivo === "Todos" ||
-                produto.materiais.some(
-                    (material) =>
-                        normalizarNome(material.nome) ===
-                        normalizarNome(materialAtivo)
+                // Categoria
+
+                const correspondeCategoria =
+                    categoriaAtiva === "Todas" ||
+                    normalizarNome(
+                        produto.categoriaNome
+                    ) ===
+                    normalizarNome(
+                        categoriaAtiva
+                    );
+
+                // Material
+
+                const correspondeMaterial =
+                    materialAtivo === "Todos" ||
+                    produto.materiais.some(
+                        (material) =>
+                            normalizarNome(
+                                material.nome
+                            ) ===
+                            normalizarNome(
+                                materialAtivo
+                            )
+                    );
+
+                // Promoção
+
+                const emPromocao =
+                    produtoEstaEmPromocao(
+                        produto
+                    );
+
+                const correspondePromocao =
+                    promocaoAtiva === "todos" ||
+                    (promocaoAtiva === "sim" &&
+                        emPromocao) ||
+                    (promocaoAtiva === "nao" &&
+                        !emPromocao);
+
+                return (
+                    correspondeBusca &&
+                    correspondeCategoria &&
+                    correspondeMaterial &&
+                    correspondePromocao
                 );
+            }
+        );
 
-            return (
-                correspondeBusca &&
-                correspondeCategoria &&
-                correspondeMaterial
-            );
-        });
+        // Ordenação
 
         switch (ordenacao) {
             case "menor-preco":
                 resultado.sort(
-                    (a, b) => Number(a.preco) - Number(b.preco)
+                    (a, b) =>
+                        obterPrecoVenda(a) -
+                        obterPrecoVenda(b)
                 );
                 break;
 
             case "maior-preco":
                 resultado.sort(
-                    (a, b) => Number(b.preco) - Number(a.preco)
+                    (a, b) =>
+                        obterPrecoVenda(b) -
+                        obterPrecoVenda(a)
                 );
                 break;
 
@@ -582,11 +858,15 @@ export default function ListagemProdutos() {
             default:
                 resultado.sort((a, b) => {
                     const dataA = new Date(
-                        a.createdAt || a.criadoEm || 0
+                        a.createdAt ||
+                        a.criadoEm ||
+                        0
                     ).getTime();
 
                     const dataB = new Date(
-                        b.createdAt || b.criadoEm || 0
+                        b.createdAt ||
+                        b.criadoEm ||
+                        0
                     ).getTime();
 
                     return dataB - dataA;
@@ -600,51 +880,111 @@ export default function ListagemProdutos() {
         busca,
         categoriaAtiva,
         materialAtivo,
+        promocaoAtiva,
         ordenacao,
     ]);
+
+    // ========================================================
+    // SELECIONAR CATEGORIA
+    // ========================================================
 
     function selecionarCategoria(categoria) {
         setCategoriaAtiva(categoria);
 
-        const novosParametros = new URLSearchParams(searchParams);
+        const novosParametros =
+            new URLSearchParams(searchParams);
 
         if (categoria === "Todas") {
-            novosParametros.delete("categoria");
-        } else {
-            const categoriaEncontrada = categorias.find(
-                (item) =>
-                    normalizarNome(item.nome) ===
-                    normalizarNome(categoria)
+            novosParametros.delete(
+                "categoria"
             );
+        } else {
+            const categoriaEncontrada =
+                categorias.find(
+                    (item) =>
+                        normalizarNome(
+                            item.nome
+                        ) ===
+                        normalizarNome(
+                            categoria
+                        )
+                );
 
             novosParametros.set(
                 "categoria",
                 categoriaEncontrada?.slug ||
-                gerarSlugCategoria(categoria)
+                gerarSlugCategoria(
+                    categoria
+                )
             );
         }
 
-        setSearchParams(novosParametros, { replace: true });
+        setSearchParams(
+            novosParametros,
+            { replace: true }
+        );
     }
+
+    // ========================================================
+    // SELECIONAR PROMOÇÃO
+    // ========================================================
+
+    function selecionarPromocao(valor) {
+        setPromocaoAtiva(valor);
+
+        const novosParametros =
+            new URLSearchParams(searchParams);
+
+        if (valor === "todos") {
+            novosParametros.delete(
+                "promocao"
+            );
+        } else {
+            novosParametros.set(
+                "promocao",
+                valor
+            );
+        }
+
+        setSearchParams(
+            novosParametros,
+            { replace: true }
+        );
+    }
+
+    // ========================================================
+    // LIMPAR FILTROS
+    // ========================================================
 
     function limparFiltros() {
         setBusca("");
         setCategoriaAtiva("Todas");
         setMaterialAtivo("Todos");
+        setPromocaoAtiva("todos");
         setOrdenacao("recentes");
 
-        const novosParametros = new URLSearchParams(searchParams);
+        const novosParametros =
+            new URLSearchParams(searchParams);
 
         novosParametros.delete("busca");
         novosParametros.delete("categoria");
+        novosParametros.delete("promocao");
 
-        setSearchParams(novosParametros, { replace: true });
+        setSearchParams(
+            novosParametros,
+            { replace: true }
+        );
     }
 
     const possuiFiltros =
         busca.trim() !== "" ||
         categoriaAtiva !== "Todas" ||
-        materialAtivo !== "Todos";
+        materialAtivo !== "Todos" ||
+        promocaoAtiva !== "todos";
+
+    // ========================================================
+    // INTERFACE
+    // ========================================================
 
     return (
         <main className="min-h-screen bg-[#FCFAF6] text-[#211C14]">
@@ -654,16 +994,22 @@ export default function ListagemProdutos() {
                 <FaixaNavegacao
                     mostrarVoltar={false}
                     itens={[
-                        { label: "Início", to: "/" },
-                        { label: "Produtos" },
+                        {
+                            label: "Início",
+                            to: "/",
+                        },
+                        {
+                            label: "Produtos",
+                        },
                     ]}
                     informacaoDireita={
                         carregando
                             ? "Carregando coleção..."
-                            : `${produtosFiltrados.length} ${
-                                produtosFiltrados.length === 1
-                                    ? "peça encontrada"
-                                    : "peças encontradas"
+                            : `${produtosFiltrados.length
+                            } ${produtosFiltrados.length ===
+                                1
+                                ? "peça encontrada"
+                                : "peças encontradas"
                             }`
                     }
                 />
@@ -678,11 +1024,15 @@ export default function ListagemProdutos() {
                     className="fixed right-5 top-5 z-50 max-w-[calc(100%-40px)] rounded-xl border border-[#EAE0CE] bg-white px-5 py-4 text-sm text-[#211C14] shadow-lg"
                 >
                     <div className="flex items-center gap-3">
-                        <span className="flex-1">{mensagem}</span>
+                        <span className="flex-1">
+                            {mensagem}
+                        </span>
 
                         <button
                             type="button"
-                            onClick={() => setMensagem("")}
+                            onClick={() =>
+                                setMensagem("")
+                            }
                             aria-label="Fechar mensagem"
                             className="text-[#847A6C] hover:text-[#211C14]"
                         >
@@ -700,17 +1050,28 @@ export default function ListagemProdutos() {
 
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                         <div className="flex flex-col gap-3 sm:flex-row">
+                            {/* Botão filtros mobile */}
+
                             <button
                                 type="button"
                                 onClick={() =>
-                                    setMostrarFiltros((atual) => !atual)
+                                    setMostrarFiltros(
+                                        (atual) => !atual
+                                    )
                                 }
-                                aria-expanded={mostrarFiltros}
+                                aria-expanded={
+                                    mostrarFiltros
+                                }
                                 className="inline-flex items-center justify-center gap-2 rounded-full border border-[#E8DDCA] px-5 py-3 text-sm transition-colors hover:border-[#B9975B] lg:hidden"
                             >
-                                <SlidersHorizontal size={16} />
+                                <SlidersHorizontal
+                                    size={16}
+                                />
+
                                 Filtros
                             </button>
+
+                            {/* Ordenação */}
 
                             <label className="flex items-center gap-3 rounded-full border border-[#E8DDCA] bg-white px-4 py-2.5">
                                 <ArrowDownUp
@@ -725,7 +1086,9 @@ export default function ListagemProdutos() {
                                 <select
                                     value={ordenacao}
                                     onChange={(event) =>
-                                        setOrdenacao(event.target.value)
+                                        setOrdenacao(
+                                            event.target.value
+                                        )
                                     }
                                     aria-label="Ordenar produtos"
                                     className="min-w-0 bg-transparent text-xs outline-none"
@@ -733,12 +1096,15 @@ export default function ListagemProdutos() {
                                     <option value="recentes">
                                         Mais recentes
                                     </option>
+
                                     <option value="menor-preco">
                                         Menor preço
                                     </option>
+
                                     <option value="maior-preco">
                                         Maior preço
                                     </option>
+
                                     <option value="nome">
                                         Nome A–Z
                                     </option>
@@ -747,15 +1113,22 @@ export default function ListagemProdutos() {
                         </div>
                     </div>
 
+                    {/* Layout principal */}
+
                     <div className="mt-8 grid grid-cols-1 gap-8 lg:grid-cols-[220px_minmax(0,1fr)]">
-                        {/* Barra lateral de filtros */}
+                        {/* ================================= */}
+                        {/* SIDEBAR DE FILTROS */}
+                        {/* ================================= */}
 
                         <aside
-                            className={`${
-                                mostrarFiltros ? "block" : "hidden"
-                            } lg:block`}
+                            className={`${mostrarFiltros
+                                    ? "block"
+                                    : "hidden"
+                                } lg:block`}
                         >
                             <div className="rounded-2xl border border-[#EAE0CE] bg-white p-5">
+                                {/* Cabeçalho */}
+
                                 <div className="mb-5 flex items-center justify-between">
                                     <h2 className="font-serif text-xl">
                                         Filtrar por
@@ -764,13 +1137,19 @@ export default function ListagemProdutos() {
                                     {possuiFiltros && (
                                         <button
                                             type="button"
-                                            onClick={limparFiltros}
+                                            onClick={
+                                                limparFiltros
+                                            }
                                             className="text-xs text-[#968052] underline underline-offset-4 hover:text-[#211C14]"
                                         >
                                             Limpar
                                         </button>
                                     )}
                                 </div>
+
+                                {/* ========================= */}
+                                {/* CATEGORIAS */}
+                                {/* ========================= */}
 
                                 <div className="border-b border-[#EFE7DA] pb-6">
                                     <h3 className="mb-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9B805D]">
@@ -782,32 +1161,44 @@ export default function ListagemProdutos() {
                                             <input
                                                 type="radio"
                                                 name="categoria"
-                                                checked={categoriaAtiva === "Todas"}
+                                                checked={
+                                                    categoriaAtiva ===
+                                                    "Todas"
+                                                }
                                                 onChange={() =>
-                                                    selecionarCategoria("Todas")
+                                                    selecionarCategoria(
+                                                        "Todas"
+                                                    )
                                                 }
                                                 className="accent-[#968052]"
                                             />
+
                                             Todas as categorias
                                         </label>
 
                                         {categoriasDisponiveis.map(
                                             (categoria) => (
                                                 <label
-                                                    key={categoria}
+                                                    key={
+                                                        categoria
+                                                    }
                                                     className="flex cursor-pointer items-center gap-3 text-sm"
                                                 >
                                                     <input
                                                         type="radio"
                                                         name="categoria"
                                                         checked={
-                                                            categoriaAtiva === categoria
+                                                            categoriaAtiva ===
+                                                            categoria
                                                         }
                                                         onChange={() =>
-                                                            selecionarCategoria(categoria)
+                                                            selecionarCategoria(
+                                                                categoria
+                                                            )
                                                         }
                                                         className="accent-[#968052]"
                                                     />
+
                                                     {categoria}
                                                 </label>
                                             )
@@ -815,7 +1206,11 @@ export default function ListagemProdutos() {
                                     </div>
                                 </div>
 
-                                <div className="pt-6">
+                                {/* ========================= */}
+                                {/* MATERIAIS */}
+                                {/* ========================= */}
+
+                                <div className="border-b border-[#EFE7DA] py-6">
                                     <h3 className="mb-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9B805D]">
                                         Materiais
                                     </h3>
@@ -825,49 +1220,119 @@ export default function ListagemProdutos() {
                                             <input
                                                 type="radio"
                                                 name="material"
-                                                checked={materialAtivo === "Todos"}
+                                                checked={
+                                                    materialAtivo ===
+                                                    "Todos"
+                                                }
                                                 onChange={() =>
-                                                    setMaterialAtivo("Todos")
+                                                    setMaterialAtivo(
+                                                        "Todos"
+                                                    )
                                                 }
                                                 className="accent-[#968052]"
                                             />
+
                                             Todos os materiais
                                         </label>
 
                                         {materiaisDisponiveis.map(
                                             (material) => (
                                                 <label
-                                                    key={material}
+                                                    key={
+                                                        material
+                                                    }
                                                     className="flex cursor-pointer items-center gap-3 text-sm"
                                                 >
                                                     <input
                                                         type="radio"
                                                         name="material"
                                                         checked={
-                                                            materialAtivo === material
+                                                            materialAtivo ===
+                                                            material
                                                         }
                                                         onChange={() =>
-                                                            setMaterialAtivo(material)
+                                                            setMaterialAtivo(
+                                                                material
+                                                            )
                                                         }
                                                         className="accent-[#968052]"
                                                     />
+
                                                     {material}
                                                 </label>
                                             )
                                         )}
                                     </div>
                                 </div>
+
+                                {/* ========================= */}
+                                {/* PROMOÇÕES - NOVO FILTRO */}
+                                {/* ========================= */}
+
+                                <div className="pt-6">
+                                    <h3 className="mb-4 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#9B805D]">
+                                        Promoções
+                                    </h3>
+
+                                    <div className="space-y-3">
+                                        {[
+                                            {
+                                                valor: "todos",
+                                                texto: "Todos os produtos",
+                                            },
+                                            {
+                                                valor: "sim",
+                                                texto: "Em promoção",
+                                            },
+                                        ].map((opcao) => (
+                                            <label
+                                                key={
+                                                    opcao.valor
+                                                }
+                                                className="flex cursor-pointer items-center gap-3 text-sm"
+                                            >
+                                                <input
+                                                    type="radio"
+                                                    name="promocao"
+                                                    value={
+                                                        opcao.valor
+                                                    }
+                                                    checked={
+                                                        promocaoAtiva ===
+                                                        opcao.valor
+                                                    }
+                                                    onChange={() =>
+                                                        selecionarPromocao(
+                                                            opcao.valor
+                                                        )
+                                                    }
+                                                    className="accent-[#968052]"
+                                                />
+
+                                                <span className="text-[#211C14]">
+                                                    {opcao.texto}
+                                                </span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
                         </aside>
 
-                        {/* Resultados */}
+                        {/* ================================= */}
+                        {/* RESULTADOS */}
+                        {/* ================================= */}
 
                         <div className="min-w-0">
+                            {/* Filtros ativos */}
+
                             {possuiFiltros && (
                                 <div className="mb-5 flex flex-wrap items-center gap-2">
                                     <span className="mr-1 text-xs text-[#847A6C]">
                                         Filtros ativos:
                                     </span>
+
+                                    {/* Busca */}
 
                                     {busca.trim() && (
                                         <button
@@ -876,53 +1341,100 @@ export default function ListagemProdutos() {
                                                 setBusca("");
 
                                                 const novosParametros =
-                                                    new URLSearchParams(searchParams);
+                                                    new URLSearchParams(
+                                                        searchParams
+                                                    );
 
-                                                novosParametros.delete("busca");
+                                                novosParametros.delete(
+                                                    "busca"
+                                                );
 
                                                 setSearchParams(
                                                     novosParametros,
-                                                    { replace: true }
+                                                    {
+                                                        replace: true,
+                                                    }
                                                 );
                                             }}
                                             className="inline-flex items-center gap-2 rounded-full bg-[#F0E8D9] px-3 py-1.5 text-xs"
                                         >
                                             Busca: {busca}
+
                                             <X size={13} />
                                         </button>
                                     )}
 
-                                    {categoriaAtiva !== "Todas" && (
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                selecionarCategoria("Todas")
-                                            }
-                                            className="inline-flex items-center gap-2 rounded-full bg-[#F0E8D9] px-3 py-1.5 text-xs"
-                                        >
-                                            {categoriaAtiva}
-                                            <X size={13} />
-                                        </button>
-                                    )}
+                                    {/* Categoria */}
 
-                                    {materialAtivo !== "Todos" && (
-                                        <button
-                                            type="button"
-                                            onClick={() =>
-                                                setMaterialAtivo("Todos")
-                                            }
-                                            className="inline-flex items-center gap-2 rounded-full bg-[#F0E8D9] px-3 py-1.5 text-xs"
-                                        >
-                                            {materialAtivo}
-                                            <X size={13} />
-                                        </button>
-                                    )}
+                                    {categoriaAtiva !==
+                                        "Todas" && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    selecionarCategoria(
+                                                        "Todas"
+                                                    )
+                                                }
+                                                className="inline-flex items-center gap-2 rounded-full bg-[#F0E8D9] px-3 py-1.5 text-xs"
+                                            >
+                                                {categoriaAtiva}
+
+                                                <X size={13} />
+                                            </button>
+                                        )}
+
+                                    {/* Material */}
+
+                                    {materialAtivo !==
+                                        "Todos" && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setMaterialAtivo(
+                                                        "Todos"
+                                                    )
+                                                }
+                                                className="inline-flex items-center gap-2 rounded-full bg-[#F0E8D9] px-3 py-1.5 text-xs"
+                                            >
+                                                {materialAtivo}
+
+                                                <X size={13} />
+                                            </button>
+                                        )}
+
+                                    {/* Promoção */}
+
+                                    {promocaoAtiva !==
+                                        "todos" && (
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    selecionarPromocao(
+                                                        "todos"
+                                                    )
+                                                }
+                                                className="inline-flex items-center gap-2 rounded-full bg-[#F0E8D9] px-3 py-1.5 text-xs"
+                                            >
+                                                {promocaoAtiva ===
+                                                    "sim"
+                                                    ? "Em promoção"
+                                                    : "Sem promoção"}
+
+                                                <X size={13} />
+                                            </button>
+                                        )}
                                 </div>
                             )}
 
+                            {/* ========================= */}
+                            {/* CARREGAMENTO */}
+                            {/* ========================= */}
+
                             {carregando ? (
                                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                                    {[1, 2, 3, 4, 5, 6].map((item) => (
+                                    {[
+                                        1, 2, 3, 4, 5, 6,
+                                    ].map((item) => (
                                         <div
                                             key={item}
                                             className="animate-pulse overflow-hidden rounded-2xl border border-[#EAE0CE] bg-white"
@@ -931,13 +1443,19 @@ export default function ListagemProdutos() {
 
                                             <div className="space-y-3 p-5">
                                                 <div className="h-3 w-1/3 rounded bg-[#EAE0CE]" />
+
                                                 <div className="h-4 w-3/4 rounded bg-[#EAE0CE]" />
+
                                                 <div className="h-4 w-1/2 rounded bg-[#EAE0CE]" />
                                             </div>
                                         </div>
                                     ))}
                                 </div>
                             ) : erro ? (
+                                /* ========================= */
+                                /* ERRO */
+                                /* ========================= */
+
                                 <div className="rounded-2xl border border-[#EAE0CE] bg-white px-5 py-14 text-center">
                                     <h2 className="font-serif text-2xl">
                                         Não foi possível carregar a coleção
@@ -949,13 +1467,20 @@ export default function ListagemProdutos() {
 
                                     <button
                                         type="button"
-                                        onClick={carregarDados}
+                                        onClick={
+                                            carregarDados
+                                        }
                                         className="mt-6 rounded-full bg-[#211C14] px-6 py-3 text-sm text-white transition-colors hover:bg-[#4A3D2B]"
                                     >
                                         Tentar novamente
                                     </button>
                                 </div>
-                            ) : produtosFiltrados.length === 0 ? (
+                            ) : produtosFiltrados.length ===
+                                0 ? (
+                                /* ========================= */
+                                /* NENHUM RESULTADO */
+                                /* ========================= */
+
                                 <div className="rounded-2xl border border-[#EAE0CE] bg-white px-5 py-16 text-center">
                                     <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#F7F2E8]">
                                         <Search
@@ -969,36 +1494,55 @@ export default function ListagemProdutos() {
                                     </h2>
 
                                     <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[#847A6C]">
-                                        Não encontramos produtos com esses
-                                        critérios. Experimente mudar sua busca
-                                        ou seus filtros.
+                                        Não encontramos produtos
+                                        com esses critérios.
+                                        Experimente mudar sua
+                                        busca ou seus filtros.
                                     </p>
 
                                     <button
                                         type="button"
-                                        onClick={limparFiltros}
+                                        onClick={
+                                            limparFiltros
+                                        }
                                         className="mt-6 rounded-full bg-[#211C14] px-6 py-3 text-sm text-white transition-colors hover:bg-[#4A3D2B]"
                                     >
                                         Limpar filtros
                                     </button>
                                 </div>
                             ) : (
+                                /* ========================= */
+                                /* GRID DE PRODUTOS */
+                                /* ========================= */
+
                                 <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                                    {produtosFiltrados.map((produto) => (
-                                        <CardProduto
-                                            key={produto.id}
-                                            produto={produto}
-                                            favorito={favoritos.includes(produto.id)}
-                                            aoAlternarFavorito={alternarFavorito}
-                                            aoAdicionarSacola={adicionarSacola}
-                                            processandoFavorito={processandoFavoritos.includes(
-                                                produto.id
-                                            )}
-                                            processandoSacola={processandoSacola.includes(
-                                                produto.id
-                                            )}
-                                        />
-                                    ))}
+                                    {produtosFiltrados.map(
+                                        (produto) => (
+                                            <CardProduto
+                                                key={
+                                                    produto.id
+                                                }
+                                                produto={
+                                                    produto
+                                                }
+                                                favorito={favoritos.includes(
+                                                    produto.id
+                                                )}
+                                                aoAlternarFavorito={
+                                                    alternarFavorito
+                                                }
+                                                aoAdicionarSacola={
+                                                    adicionarSacola
+                                                }
+                                                processandoFavorito={processandoFavoritos.includes(
+                                                    produto.id
+                                                )}
+                                                processandoSacola={processandoSacola.includes(
+                                                    produto.id
+                                                )}
+                                            />
+                                        )
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -1006,7 +1550,9 @@ export default function ListagemProdutos() {
                 </div>
             </section>
 
-            {/* Indicador da sacola */}
+            {/* ================================= */}
+            {/* INDICADOR DA SACOLA */}
+            {/* ================================= */}
 
             {sacola.length > 0 && (
                 <div className="fixed bottom-5 right-5 z-40">
@@ -1016,18 +1562,25 @@ export default function ListagemProdutos() {
 
                             <span>
                                 {sacola.length}{" "}
-                                {sacola.length === 1 ? "item" : "itens"} na sacola
+                                {sacola.length === 1
+                                    ? "item"
+                                    : "itens"}{" "}
+                                na sacola
                             </span>
                         </div>
                     </Link>
                 </div>
             )}
 
-            {/* Modal de autenticação */}
+            {/* ================================= */}
+            {/* MODAL DE AUTENTICAÇÃO */}
+            {/* ================================= */}
 
             <ModalAutenticacao
                 aberto={modalAutenticacao}
-                onFechar={() => setModalAutenticacao(false)}
+                onFechar={() =>
+                    setModalAutenticacao(false)
+                }
                 motivo={motivoAutenticacao}
             />
         </main>

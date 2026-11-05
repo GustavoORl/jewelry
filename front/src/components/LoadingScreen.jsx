@@ -17,7 +17,7 @@ export default function LoadingScreen() {
         <div
             role="status"
             aria-live="polite"
-            aria-label="Carregando AURELIA"
+            aria-label="Carregando AURORA"
             className={`fixed inset-0 z-[9999] flex min-h-screen flex-col items-center justify-center bg-[#FAF9F5] transition-opacity duration-500 ${
                 visivel ? "opacity-100" : "opacity-0"
             }`}
@@ -42,7 +42,7 @@ export default function LoadingScreen() {
                 </div>
 
                 <h1 className="mt-7 font-serif text-3xl tracking-[0.18em] text-[#211C14]">
-                    AURELIA
+                    AURORA
                 </h1>
 
                 <p className="mt-2 text-[9px] tracking-[0.4em] text-[#968052]">
