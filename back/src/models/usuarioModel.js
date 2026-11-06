@@ -55,8 +55,9 @@ export async function listarUsuariosModel() {
 }
 
 export async function buscarUsuarioPorIdModel(id) {
-  return prisma.usuario.findUnique({
+  const usuario = await prisma.usuario.findUnique({
     where: { id },
+
     select: {
       id: true,
       nome: true,
@@ -65,8 +66,22 @@ export async function buscarUsuarioPorIdModel(id) {
       tipo: true,
       ativo: true,
       criadoEm: true,
+      googleId: true,
+      senhaHash: true,
     },
   });
+
+  if (!usuario) {
+    return null;
+  }
+
+  const { googleId, senhaHash, ...dadosPublicos } = usuario;
+
+  return {
+    ...dadosPublicos,
+    possuiGoogle: Boolean(googleId),
+    possuiSenha: Boolean(senhaHash),
+  };
 }
 
 export async function desativarUsuarioModel(id) {

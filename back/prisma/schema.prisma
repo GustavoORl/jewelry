@@ -10,7 +10,8 @@ model Usuario {
   id                  String               @id @default(cuid())
   nome                String
   email               String               @unique
-  senhaHash           String
+  senhaHash           String?
+  googleId            String?              @unique
   cpfCnpj             String?              @unique
   telefone            String?
   tipo                TipoUsuario          @default(CLIENTE)
@@ -145,12 +146,10 @@ model ItemCarrinho {
 }
 
 model Pedido {
-  id        String       @id @default(cuid())
-  usuarioId String
-  status    StatusPedido @default(PENDENTE)
-
-  valorTotal Decimal @db.Decimal(10, 2)
-
+  id                 String       @id @default(cuid())
+  usuarioId          String
+  status             StatusPedido @default(PENDENTE)
+  valorTotal         Decimal      @db.Decimal(10, 2)
   destinatario       String
   cepEntrega         String
   ruaEntrega         String
@@ -159,15 +158,12 @@ model Pedido {
   bairroEntrega      String
   cidadeEntrega      String
   estadoEntrega      String
-
-  expiraEm DateTime?
-
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-
-  itens      ItemPedido[]
-  pagamentos Pagamento[]
-  usuario    Usuario      @relation(fields: [usuarioId], references: [id])
+  criadoEm           DateTime     @default(now())
+  atualizadoEm       DateTime     @updatedAt
+  expiraEm           DateTime?
+  itens              ItemPedido[]
+  pagamentos         Pagamento[]
+  usuario            Usuario      @relation(fields: [usuarioId], references: [id])
 
   @@index([usuarioId])
   @@index([status])
@@ -182,8 +178,8 @@ model ItemPedido {
   nomeProduto      String
   quantidade       Int
   precoUnitario    Decimal  @db.Decimal(10, 2)
-  precoOriginal    Decimal? @db.Decimal(10, 2)
   descontoUnitario Decimal? @db.Decimal(10, 2)
+  precoOriginal    Decimal? @db.Decimal(10, 2)
   pedido           Pedido   @relation(fields: [pedidoId], references: [id], onDelete: Cascade)
   produto          Produto  @relation(fields: [produtoId], references: [id])
 
@@ -215,28 +211,60 @@ model Favorito {
 }
 
 model Pagamento {
-  id       String            @id @default(cuid())
-  pedidoId String
-  provedor ProvedorPagamento @default(MERCADO_PAGO)
-  metodo   MetodoPagamento
-  status   StatusPagamento   @default(PENDENTE)
-  valor    Decimal           @db.Decimal(10, 2)
-
-  provedorPagamentoId String? @unique
-  provedorOrdemId     String? @unique
-
-  referenciaExterna String @unique
-  chaveIdempotencia String @unique
-
-  detalhes Json?
-
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-
-  pedido Pedido @relation(fields: [pedidoId], references: [id])
+  id                  String            @id @default(cuid())
+  pedidoId            String
+  provedor            ProvedorPagamento @default(MERCADO_PAGO)
+  metodo              MetodoPagamento
+  status              StatusPagamento   @default(PENDENTE)
+  valor               Decimal           @db.Decimal(10, 2)
+  provedorPagamentoId String?           @unique
+  provedorOrdemId     String?           @unique
+  referenciaExterna   String            @unique
+  chaveIdempotencia   String            @unique
+  detalhes            Json?
+  criadoEm            DateTime          @default(now())
+  atualizadoEm        DateTime          @updatedAt
+  pedido              Pedido            @relation(fields: [pedidoId], references: [id])
 
   @@index([pedidoId])
   @@index([status])
+}
+
+model Promocao {
+  id           String              @id @default(cuid())
+  nome         String
+  descricao    String?
+  tipo         TipoDesconto
+  valor        Decimal             @db.Decimal(10, 2)
+  ativo        Boolean             @default(true)
+  inicioEm     DateTime
+  fimEm        DateTime
+  criadoEm     DateTime            @default(now())
+  atualizadoEm DateTime            @updatedAt
+  categorias   PromocaoCategoria[]
+  produtos     PromocaoProduto[]
+
+  @@index([ativo, inicioEm, fimEm])
+}
+
+model PromocaoProduto {
+  promocaoId String
+  produtoId  String
+  produto    Produto  @relation(fields: [produtoId], references: [id], onDelete: Cascade)
+  promocao   Promocao @relation(fields: [promocaoId], references: [id], onDelete: Cascade)
+
+  @@id([promocaoId, produtoId])
+  @@index([produtoId])
+}
+
+model PromocaoCategoria {
+  promocaoId  String
+  categoriaId String
+  categoria   Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
+  promocao    Promocao  @relation(fields: [promocaoId], references: [id], onDelete: Cascade)
+
+  @@id([promocaoId, categoriaId])
+  @@index([categoriaId])
 }
 
 enum TipoUsuario {
@@ -277,49 +305,4 @@ enum ProvedorPagamento {
 enum TipoDesconto {
   PERCENTUAL
   FIXO
-}
-
-model Promocao {
-  id        String       @id @default(cuid())
-  nome      String
-  descricao String?
-  tipo      TipoDesconto
-  valor     Decimal      @db.Decimal(10, 2)
-
-  ativo Boolean @default(true)
-
-  inicioEm DateTime
-  fimEm    DateTime
-
-  criadoEm     DateTime @default(now())
-  atualizadoEm DateTime @updatedAt
-
-  produtos   PromocaoProduto[]
-  categorias PromocaoCategoria[]
-
-  @@index([ativo, inicioEm, fimEm])
-}
-
-model PromocaoProduto {
-  promocaoId String
-  produtoId  String
-
-  promocao Promocao @relation(fields: [promocaoId], references: [id], onDelete: Cascade)
-
-  produto Produto @relation(fields: [produtoId], references: [id], onDelete: Cascade)
-
-  @@id([promocaoId, produtoId])
-  @@index([produtoId])
-}
-
-model PromocaoCategoria {
-  promocaoId  String
-  categoriaId String
-
-  promocao Promocao @relation(fields: [promocaoId], references: [id], onDelete: Cascade)
-
-  categoria Categoria @relation(fields: [categoriaId], references: [id], onDelete: Cascade)
-
-  @@id([promocaoId, categoriaId])
-  @@index([categoriaId])
 }
