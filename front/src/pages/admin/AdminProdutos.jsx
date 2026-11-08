@@ -47,6 +47,7 @@ function ProductModal({
   materials,
   onClose,
   onSave,
+  onFotoExcluida,
   saving,
   error,
 }) {
@@ -67,7 +68,21 @@ function ProductModal({
   const [slugManual, setSlugManual] = useState(Boolean(product?.slug));
   const [imagens, setImagens] = useState([]);
   const [imagensPreview, setImagensPreview] = useState([]);
-  const imagensExistentes = product?.imagens || [];
+  const [imagensExistentes, setImagensExistentes] = useState(product?.imagens || []);
+  const [excluindoFoto, setExcluindoFoto] = useState(null);
+  const [mensagemFoto, setMensagemFoto] = useState("");
+  async function excluirFoto(imagem) {
+    if (saving || excluindoFoto || !window.confirm("Excluir esta foto do produto? A exclusão é imediata e não depende de salvar o formulário.")) return;
+    setExcluindoFoto(imagem.id); setMensagemFoto("");
+    try {
+      const resultado = await apiFetch('/admin/produtos/' + product.id + '/imagens/' + imagem.id, { method: 'DELETE' });
+      setImagensExistentes(atuais => atuais.filter(foto => foto.id !== imagem.id));
+      onFotoExcluida(product.id, imagem.id);
+      setMensagemFoto(resultado.aviso || "Foto excluída com sucesso.");
+    } catch (erro) { setMensagemFoto(erro.message || "Não foi possível excluir a foto."); }
+    finally { setExcluindoFoto(null); }
+  }
+
 
 
   const alternarMaterial = (materialId) => {
@@ -99,6 +114,7 @@ function ProductModal({
 
   async function submit(event) {
     event.preventDefault();
+    if (excluindoFoto) return;
 
     await onSave({
       nome: form.nome.trim(),
@@ -116,7 +132,7 @@ function ProductModal({
     <div
       className="fixed inset-0 z-[70] flex items-end justify-center bg-[#211c14]/40 p-0 backdrop-blur-[2px] sm:items-center sm:p-5"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !saving) onClose();
+        if (event.target === event.currentTarget && !saving && !excluindoFoto) onClose();
       }}
     >
       <section
@@ -144,7 +160,7 @@ function ProductModal({
           <button
             type="button"
             onClick={onClose}
-            disabled={saving}
+            disabled={saving || Boolean(excluindoFoto)}
             className="rounded-xl p-2 text-[#817664] hover:bg-[#f1e8d8] disabled:opacity-50"
             aria-label="Fechar formulário"
           >
@@ -158,6 +174,7 @@ function ProductModal({
           </div>
         )}
 
+        {mensagemFoto && <p role="status" className="mt-4 text-sm text-[#615848]">{mensagemFoto}</p>}
         <form onSubmit={submit} className="mt-6 space-y-5">
           <div>
             <span className="mb-1.5 block text-xs font-medium text-[#615848]">
@@ -173,6 +190,7 @@ function ProductModal({
                         alt={`Imagem atual ${index + 1} de ${form.nome || "produto"}`}
                         className="aspect-square w-full rounded-lg border border-[#e9dcc4] object-cover"
                       />
+                      <button type="button" disabled={saving || Boolean(excluindoFoto)} onClick={() => excluirFoto(imagem)} aria-label={`Excluir foto ${index + 1}`} className="absolute right-1 top-1 rounded-lg bg-white/95 px-2 py-1 text-[10px] text-red-600 shadow disabled:opacity-50">{excluindoFoto === imagem.id ? "Excluindo..." : "Excluir foto"}</button>
                       {index === 0 && (
                         <span className="absolute bottom-2 left-2 rounded-md bg-[#fcfaf5]/95 px-2 py-1 text-[10px] text-[#615848]">
                           Imagem atual
@@ -189,7 +207,7 @@ function ProductModal({
                       />
                       <button
                         type="button"
-                        disabled={saving}
+                        disabled={saving || Boolean(excluindoFoto)}
                         onClick={() => {
                           URL.revokeObjectURL(imagensPreview[index]);
                           setImagens((atuais) => atuais.filter((_, i) => i !== index));
@@ -212,7 +230,7 @@ function ProductModal({
                 type="file"
                 accept="image/*"
                 multiple
-                disabled={saving}
+                disabled={saving || Boolean(excluindoFoto)}
                 onChange={(event) => {
                   const arquivos = Array.from(event.target.files || []);
                   if (!arquivos.length) return;
@@ -226,12 +244,12 @@ function ProductModal({
                 className="w-full text-xs text-[#615848] file:mr-3 file:rounded-lg file:border-0 file:bg-[#f1e8d8] file:px-3 file:py-2 file:text-xs file:font-medium file:text-[#5b4a2d]"
               />
               <p className="mt-2 text-[10px] leading-5 text-[#978b78]">
-                Selecione uma ou várias imagens. Ao editar, as imagens atuais são mantidas; as novas serão enviadas junto com os dados do produto.
+                Selecione uma ou várias imagens. Excluir uma foto atual tem efeito imediato; novas fotos são enviadas ao salvar. Ao excluir a principal, a próxima foto assume seu lugar.
               </p>
             </div>
           </div>
 
-          <fieldset disabled={saving}>
+          <fieldset disabled={saving || Boolean(excluindoFoto)}>
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="block sm:col-span-2">
                 <span className="mb-1.5 block text-xs font-medium text-[#615848]">
@@ -402,7 +420,7 @@ function ProductModal({
             <button
               type="button"
               onClick={onClose}
-              disabled={saving}
+              disabled={saving || Boolean(excluindoFoto)}
               className="rounded-xl border border-[#e5d9c5] px-5 py-3 text-sm font-medium text-[#6e6659] transition hover:bg-[#f6f0e5]"
             >
               Fechar
@@ -410,7 +428,7 @@ function ProductModal({
 
             <button
               type="submit"
-              disabled={saving || categories.length === 0}
+              disabled={saving || Boolean(excluindoFoto) || categories.length === 0}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#211c14] px-5 py-3 text-sm font-medium text-[#fcfaf5] transition hover:bg-[#433827] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {saving ? (
@@ -1141,6 +1159,11 @@ export default function AdminProdutos() {
             setModalOpen(false);
             setModalProduct(null);
             setError("");
+          }}
+          onFotoExcluida={(produtoId, imagemId) => {
+            const atualizar = produto => ({ ...produto, imagens: (produto.imagens || []).filter(foto => foto.id !== imagemId) });
+            setProducts(atuais => atuais.map(produto => produto.id === produtoId ? atualizar(produto) : produto));
+            setModalProduct(atual => atual?.id === produtoId ? atualizar(atual) : atual);
           }}
           onSave={saveProduct}
           saving={saving}

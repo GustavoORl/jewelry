@@ -163,7 +163,7 @@ export async function excluirProdutoController(req, res, next) {
       return res.status(409).json({
         sucesso: false,
         mensagem:
-          "Não foi possível excluir o produto porque existem registros relacionados a ele.",
+          "Este produto está vinculado a pedidos e precisa ser preservado no histórico, independentemente do status. Desative o produto para retirá-lo da venda.",
       });
     }
 

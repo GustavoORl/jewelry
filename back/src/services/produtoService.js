@@ -1,3 +1,4 @@
+import { criarExclusaoImagemProduto } from "./produtoImagemService.js";
 
 import { z } from "zod";
 import { enviarImagem, excluirImagem } from "./imagemService.js";
@@ -455,3 +456,5 @@ export async function atualizarStatusProdutoService(id, ativo) {
     throw erro;
   }
 }
+
+export const excluirFotoProduto = criarExclusaoImagemProduto(prisma, removerImagemDoStorage);
