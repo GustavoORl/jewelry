@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   UserRound,
+  RotateCcw,
   Package,
   MapPin,
   Heart,
@@ -391,7 +392,7 @@ export default function PerfilUser() {
 
               {pedidos.length > 0 && (
                 <Link
-                  to="/historico-compras"
+                  to="/pedidos"
                   className="hidden shrink-0 text-sm font-medium text-[#968052] transition hover:text-[#211C14] sm:block"
                 >
                   Ver todos
@@ -458,10 +459,24 @@ export default function PerfilUser() {
 
             <div className="overflow-hidden rounded-2xl border border-[#E9DCC4] bg-white shadow-sm">
               <Atalho
-                to="/historico-compras"
+                to="/pedidos"
                 Icone={Package}
                 titulo="Meus pedidos"
                 descricao="Histórico e acompanhamento"
+              />
+
+              <Atalho
+                to="/historico-compras"
+                Icone={Clock3}
+                titulo="Histórico de compras"
+                descricao="Entregues, cancelados e reembolsados"
+              />
+
+              <Atalho
+                to="/devolucoes-reembolso"
+                Icone={RotateCcw}
+                titulo="Devoluções e reembolso"
+                descricao="Solicite e acompanhe suas devoluções"
               />
 
               <Atalho

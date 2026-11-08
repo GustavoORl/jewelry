@@ -1,0 +1,2 @@
+export const nomesStatusDevolucao = { SOLICITADA: "Solicitada", APROVADA: "Aprovada — siga as instruções de envio", RECUSADA: "Recusada", RECEBIDA: "Produtos recebidos", CONCLUIDA: "Concluída" };
+export const motivosDevolucao = { DEFEITO: "Defeito no produto", ARREPENDIMENTO: "Arrependimento da compra", PRODUTO_INCORRETO: "Produto diferente do pedido", AVARIA: "Produto danificado no transporte", TAMANHO: "Tamanho inadequado", OUTRO: "Outro motivo" };

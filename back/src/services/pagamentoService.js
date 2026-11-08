@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { validarTotalPagamento } from "./checkoutValores.js";
 
 import { prisma } from "../config/prisma.js";
 
@@ -1654,6 +1655,7 @@ async function buscarPedidoParaPagamento(
 
       include: {
         usuario: true,
+        itens: true,
       },
     });
 
@@ -1726,6 +1728,7 @@ async function buscarPedidoParaPagamento(
   }
 
 
+  validarTotalPagamento(pedido);
   return pedido;
 }
 

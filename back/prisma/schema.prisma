@@ -7,11 +7,12 @@ datasource db {
 }
 
 model Usuario {
+  mensagensDevolucao MensagemDevolucao[]
+  notificacoes       Notificacao[]
   id                  String               @id @default(cuid())
   nome                String
   email               String               @unique
   senhaHash           String?
-  googleId            String?              @unique
   cpfCnpj             String?              @unique
   telefone            String?
   tipo                TipoUsuario          @default(CLIENTE)
@@ -19,6 +20,7 @@ model Usuario {
   criadoEm            DateTime             @default(now())
   atualizadoEm        DateTime             @updatedAt
   ultimoAcessoEm      DateTime?
+  googleId            String?              @unique
   carrinho            Carrinho?
   enderecos           Endereco[]
   favoritos           Favorito[]
@@ -146,6 +148,18 @@ model ItemCarrinho {
 }
 
 model Pedido {
+  subtotalProdutos   Decimal?     @db.Decimal(10, 2)
+  freteValor         Decimal?     @db.Decimal(10, 2)
+  freteCusto         Decimal?     @db.Decimal(10, 2)
+  freteServicoId     String?
+  freteServico       String?
+  freteTransportadora String?
+  fretePrazoDias     Int?
+  freteOrigemCep     String?
+  freteCotadoEm      DateTime?
+  freteAmbiente      String?
+  entregueEm         DateTime?
+  devolucao          Devolucao?
   id                 String       @id @default(cuid())
   usuarioId          String
   status             StatusPedido @default(PENDENTE)
@@ -305,4 +319,83 @@ enum ProvedorPagamento {
 enum TipoDesconto {
   PERCENTUAL
   FIXO
+}
+
+model Postagem {
+  blocos       Json     @default("[]")
+  estilo       String   @default("CLASSICO")
+  id           String   @id @default(cuid())
+  titulo       String
+  resumo       String
+  conteudo     String
+  imagemUrl    String   @default("")
+  publicada    Boolean  @default(false)
+  publicadoEm  DateTime?
+  criadoEm     DateTime @default(now())
+  atualizadoEm DateTime @updatedAt
+
+  @@index([publicada, publicadoEm])
+}
+
+model Devolucao {
+  mensagens    MensagemDevolucao[]
+  tipoMotivo   String          @default("OUTRO")
+  fotos        FotoDevolucao[]
+  id           String          @id @default(cuid())
+  pedidoId     String          @unique
+  motivo       String
+  itens        Json
+  status       StatusDevolucao  @default(SOLICITADA)
+  resposta     String?
+  criadoEm     DateTime        @default(now())
+  atualizadoEm DateTime        @updatedAt
+  pedido       Pedido          @relation(fields: [pedidoId], references: [id])
+
+  @@index([status, criadoEm])
+}
+
+enum StatusDevolucao {
+  SOLICITADA
+  APROVADA
+  RECUSADA
+  RECEBIDA
+  CONCLUIDA
+}
+
+model FotoDevolucao {
+  id          String    @id @default(cuid())
+  devolucaoId String
+  tipo        String
+  dados       Bytes
+  devolucao   Devolucao @relation(fields: [devolucaoId], references: [id], onDelete: Cascade)
+
+  @@index([devolucaoId])
+}
+
+model MensagemDevolucao {
+  id           String      @id @default(cuid())
+  devolucaoId  String
+  autorId      String?
+  autorTipo    TipoUsuario
+  texto        String
+  chaveCliente String?     @unique
+  criadoEm     DateTime    @default(now())
+  devolucao    Devolucao   @relation(fields: [devolucaoId], references: [id], onDelete: Cascade)
+  autor        Usuario?    @relation(fields: [autorId], references: [id], onDelete: SetNull)
+
+  @@index([devolucaoId, criadoEm, id])
+}
+
+model Notificacao {
+  id        String   @id @default(cuid())
+  usuarioId String
+  chave     String   @unique
+  titulo    String
+  texto     String
+  url       String
+  lidaEm    DateTime?
+  criadoEm  DateTime @default(now())
+  usuario   Usuario  @relation(fields: [usuarioId], references: [id], onDelete: Cascade)
+
+  @@index([usuarioId, lidaEm, criadoEm])
 }

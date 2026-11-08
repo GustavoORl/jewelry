@@ -854,16 +854,6 @@ export default function SacolaUser() {
                                         )}
                                     </span>
                                 </div>
-
-                                {/* FRETE */}
-
-                                <div className="flex justify-between gap-4 text-[#756C5C]">
-                                    <span>Frete</span>
-
-                                    <span className="text-right text-xs">
-                                        Calculado na próxima etapa
-                                    </span>
-                                </div>
                             </div>
 
                             {/* ================================= */}
@@ -908,7 +898,7 @@ export default function SacolaUser() {
                             <p className="mb-5 text-xs leading-5 text-[#756C5C]">
                                 O valor considera somente os produtos
                                 selecionados. Os preços serão confirmados
-                                no checkout e o frete será calculado na
+                                no checkout. Continue para a
                                 próxima etapa.
                             </p>
 

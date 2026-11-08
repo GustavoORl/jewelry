@@ -50,7 +50,6 @@ function normalizarCategoria(categoria) {
     status: categoria.ativo === false || categoria.status === "Inativa" ? "Inativa" : "Ativa",
     descricao: categoria.descricao || "",
     imagemUrl: categoria.imagens?.[0]?.url || categoria.imagemUrl || "",
-    imagemUrl: categoria.imagens?.[0]?.url || categoria.imagemUrl || "",
     produtos: categoria._count?.produtos ?? categoria.produtos?.length ?? (typeof categoria.produtos === "number" ? categoria.produtos : 0),
   };
 }

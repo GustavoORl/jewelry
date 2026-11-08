@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { editorialAdmin, devolucoesAdmin } from "../novidadesRoutes.js";
 
 import { autenticar } from "../../middlewares/autenticar.js";
 import { autorizarAdmin } from "../../middlewares/autorizarAdmin.js";
@@ -15,6 +16,8 @@ const router = Router();
 
 // Todas as rotas abaixo exigem autenticação e perfil ADMIN.
 router.use(autenticar, autorizarAdmin);
+router.use("/editorial", editorialAdmin);
+router.use("/devolucoes", devolucoesAdmin);
 
 router.use("/usuarios", usuarioRoutes);
 router.use("/produtos", produtoRoutes);

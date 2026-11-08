@@ -122,7 +122,7 @@ const transicoesAdministrativas = {
 export async function criarPedido(
   usuarioId,
   dadosEndereco,
-  itensSelecionados
+  itensSelecionados,
 ) {
   if (!usuarioId) {
     throw erro(
@@ -625,7 +625,7 @@ export async function atualizarStatus(
 export async function atualizarEnderecoPedido(
   usuarioId,
   pedidoId,
-  dadosEndereco
+  dadosEndereco,
 ) {
   // 1. AUTENTICAÇÃO
 

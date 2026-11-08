@@ -1,3 +1,4 @@
+import NotificacoesConta from "./NotificacoesConta.jsx";
 
 import { useEffect, useRef, useState } from "react";
 import {
@@ -22,8 +23,6 @@ import {
     User,
     LogIn,
     UserPlus,
-    Bell,
-    CheckCheck,
 } from "lucide-react";
 
 import { useAuth } from "../contexts/AuthContext.jsx";
@@ -267,7 +266,7 @@ export default function Header() {
             <div className="bg-[#211C14] py-3 text-[#F5F0E6] lg:px-12">
                 <div className="mx-auto flex max-w-[1320px] items-center justify-between max-sm:px-5 lg:px-0">
                     <p className="text-[9px] tracking-[0.15em] sm:text-xs sm:tracking-[0.25em]">
-                        FRETE GRÁTIS ACIMA DE R$ 299 · TROCA EM ATÉ 30 DIAS
+                        JOIAS SELECIONADAS PARA CADA MOMENTO
                     </p>
 
                     <div className="hidden items-center gap-8 text-sm md:flex">
@@ -357,55 +356,7 @@ export default function Header() {
                         </Link>
 
                         {/* Notificações */}
-                        {usuario && (
-                            <div
-                                ref={notificacoesRef}
-                                className="relative"
-                            >
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setNotificacoesAbertas(
-                                            (aberta) => !aberta
-                                        );
-                                        setContaAberta(false);
-                                    }}
-                                    aria-label="Abrir notificações"
-                                    aria-expanded={notificacoesAbertas}
-                                    className="relative flex h-10 w-10 items-center justify-center rounded-full border border-[#E7E0CE] transition-colors hover:bg-[#F3EFE3] sm:h-12 sm:w-12"
-                                >
-                                    <Bell size={21} strokeWidth={1.8} />
-                                </button>
-
-                                {notificacoesAbertas && (
-                                    <div className="absolute right-0 top-full z-50 mt-3 w-[min(288px,calc(100vw-40px))] rounded-2xl border border-[#E7E0CE] bg-[#FAF9F5] p-2 shadow-xl">
-                                        <div className="border-b border-[#E7E0CE] px-3 py-3">
-                                            <p className="text-sm font-semibold text-[#292319]">
-                                                Notificações
-                                            </p>
-                                            <p className="mt-1 text-[10px] text-[#8A8172]">
-                                                Novidades da sua conta
-                                            </p>
-                                        </div>
-
-                                        <div className="flex flex-col items-center px-3 py-6 text-center">
-                                            <CheckCheck
-                                                size={25}
-                                                strokeWidth={1.5}
-                                                className="text-[#968052]"
-                                            />
-                                            <p className="mt-3 text-xs font-medium text-[#292319]">
-                                                Tudo tranquilo por aqui!
-                                            </p>
-                                            <p className="mt-1 text-[10px] leading-relaxed text-[#8A8172]">
-                                                Quando houver novidades,
-                                                elas aparecerão aqui.
-                                            </p>
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        )}
+                        {usuario && <div ref={notificacoesRef} className="relative"><NotificacoesConta key={usuario.id} usuarioId={usuario.id} abertas={notificacoesAbertas} onAlternar={() => { setNotificacoesAbertas(a => !a); setContaAberta(false); }} onFechar={() => setNotificacoesAbertas(false)} /></div>}
 
                         {/* Conta */}
                         <div ref={contaRef} className="relative">
@@ -478,6 +429,11 @@ export default function Header() {
                                                         to: "/historico-compras",
                                                         texto: "Histórico de compras",
                                                         Icone: Clock3,
+                                                    },
+                                                    {
+                                                        to: "/devolucoes-reembolso",
+                                                        texto: "Devoluções e reembolso",
+                                                        Icone: Package,
                                                     },
                                                     {
                                                         to: "/configuracoes",
@@ -736,7 +692,7 @@ export default function Header() {
                         )}
 
                         <Link
-                            to="/minha-conta"
+                            to={usuario ? "/perfil" : "/login"}
                             onClick={() => setMenuAberto(false)}
                             className="px-2 py-3 text-sm"
                         >

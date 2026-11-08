@@ -295,7 +295,7 @@ export async function atualizarEndereco(req, res) {
     const pedido = await pedidoService.atualizarEnderecoPedido(
       usuarioId,
       pedidoId,
-      endereco
+      endereco,
     );
 
     return res.status(200).json({

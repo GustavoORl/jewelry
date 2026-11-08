@@ -10,10 +10,10 @@ import {
 } from "react-icons/fa";
 
 const linksCompra = [
-  { nome: "Colares", href: "/categoria/colares" },
-  { nome: "Brincos", href: "/categoria/brincos" },
-  { nome: "Anéis", href: "/categoria/aneis" },
-  { nome: "Pulseiras", href: "/categoria/pulseiras" },
+  { nome: "Colares", href: "/produtos?categoria=colares" },
+  { nome: "Brincos", href: "/produtos?categoria=brincos" },
+  { nome: "Anéis", href: "/produtos?categoria=aneis" },
+  { nome: "Pulseiras", href: "/produtos?categoria=pulseiras" },
 ];
 
 const linksAjuda = [

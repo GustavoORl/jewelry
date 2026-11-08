@@ -1,9 +1,9 @@
+import NotificacoesConta from "../NotificacoesConta.jsx";
 
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   Search,
-  Bell,
   ChevronDown,
   UserRound,
   Settings,
@@ -226,38 +226,7 @@ export default function AdminHeader({
             />
           </form>
 
-          {/* NOTIFICAÇÕES */}
-
-          <div ref={referenciaNotificacoes} className="relative">
-            <button
-              type="button"
-              onClick={() => {
-                setNotificacoesAbertas((anterior) => !anterior);
-                setPerfilAberto(false);
-              }}
-              aria-label="Notificações"
-              aria-expanded={notificacoesAbertas}
-              className="relative flex h-10 w-10 items-center justify-center rounded-xl text-[#756b5a] transition hover:bg-[#f2ecdf]"
-            >
-              <Bell size={19} strokeWidth={1.7} />
-            </button>
-
-            {notificacoesAbertas && (
-              <div className="absolute right-0 top-12 z-50 w-72 max-w-[calc(100vw-2rem)] rounded-2xl border border-[#e9dcc4] bg-[#fcfaf5] p-4 shadow-xl">
-                <h2 className="font-serif text-base text-[#211c14]">
-                  Notificações
-                </h2>
-
-                <p className="mt-3 text-xs leading-5 text-[#817664]">
-                  Você verá aqui avisos sobre novos pedidos, estoque e atividades da loja.
-                </p>
-
-                <p className="mt-3 border-t border-[#e9dcc4] pt-3 text-[10px] text-[#a59a87]">
-                  As notificações reais serão integradas futuramente.
-                </p>
-              </div>
-            )}
-          </div>
+          <div ref={referenciaNotificacoes} className="relative"><NotificacoesConta key={usuario?.id} usuarioId={usuario?.id} abertas={notificacoesAbertas} onAlternar={() => { setNotificacoesAbertas(a => !a); setPerfilAberto(false); }} onFechar={() => setNotificacoesAbertas(false)} /></div>
 
           {/* DIVISOR */}
 

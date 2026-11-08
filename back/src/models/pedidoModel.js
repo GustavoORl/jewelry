@@ -1,5 +1,7 @@
 import { prisma } from "../config/prisma.js";
+import { notificarStatusPedido } from "../services/notificacaoService.js";
 import { adicionarPrecosPromocionais } from "../services/promocaoPrecoService.js";
+import { precificarItens, falhaCheckout } from "../services/checkoutValores.js";
 
 /**
  * =========================================
@@ -139,154 +141,13 @@ export async function criarPedidoComItens({
                 tx
             );
 
-        const produtosPorId = new Map(
-            produtosComPromocao.map(
-                (produto) => [
-                    produto.id,
-                    produto,
-                ]
-            )
-        );
-
         /**
          * ---------------------------------------
          * 4. CALCULAR PEDIDO
          * ---------------------------------------
          */
 
-        let totalCentavos = 0;
-
-        const itensPedido = sacola.itens.map(
-            (item) => {
-                const produto =
-                    produtosPorId.get(
-                        item.produtoId
-                    );
-
-                if (
-                    !produto ||
-                    !produto.ativo ||
-                    !produto.categoria?.ativo ||
-                    produto.estoque < item.quantidade ||
-                    !Number.isInteger(item.quantidade) ||
-                    item.quantidade < 1
-                ) {
-                    const error = new Error(
-                        `O produto "${produto?.nome ?? "selecionado"}" não está disponível na quantidade solicitada.`
-                    );
-
-                    error.status = 400;
-                    throw error;
-                }
-
-                /**
-                 * PREÇO ORIGINAL
-                 */
-
-                const precoOriginalCentavos =
-                    Math.round(
-                        Number(produto.preco) * 100
-                    );
-
-                if (
-                    !Number.isSafeInteger(
-                        precoOriginalCentavos
-                    ) ||
-                    precoOriginalCentavos < 0
-                ) {
-                    const error = new Error(
-                        `O produto "${produto.nome}" possui um preço inválido.`
-                    );
-
-                    error.status = 400;
-                    throw error;
-                }
-
-                /**
-                 * PREÇO PROMOCIONAL
-                 */
-
-                const precoPromocionalCentavos =
-                    Math.round(
-                        Number(
-                            produto.precoPromocional
-                        ) * 100
-                    );
-
-                const promocaoValida =
-                    produto.emPromocao === true &&
-                    Number.isSafeInteger(
-                        precoPromocionalCentavos
-                    ) &&
-                    precoPromocionalCentavos >= 0 &&
-                    precoPromocionalCentavos <
-                        precoOriginalCentavos;
-
-                /**
-                 * PREÇO FINAL DE VENDA
-                 */
-
-                const precoUnitarioCentavos =
-                    promocaoValida
-                        ? precoPromocionalCentavos
-                        : precoOriginalCentavos;
-
-                /**
-                 * SUBTOTAL DO ITEM
-                 */
-
-                const subtotalCentavos =
-                    precoUnitarioCentavos *
-                    item.quantidade;
-
-                if (
-                    !Number.isSafeInteger(
-                        subtotalCentavos
-                    )
-                ) {
-                    const error = new Error(
-                        `Não foi possível calcular o subtotal do produto "${produto.nome}".`
-                    );
-
-                    error.status = 400;
-                    throw error;
-                }
-
-                totalCentavos += subtotalCentavos;
-
-                if (
-                    !Number.isSafeInteger(
-                        totalCentavos
-                    )
-                ) {
-                    const error = new Error(
-                        "O valor total do pedido ultrapassa o limite permitido."
-                    );
-
-                    error.status = 400;
-                    throw error;
-                }
-
-                const precoUnitario =
-                    precoUnitarioCentavos / 100;
-
-                return {
-                    idCarrinho:
-                        item.id,
-
-                    produtoId:
-                        produto.id,
-
-                    nomeProduto:
-                        produto.nome,
-
-                    quantidade:
-                        item.quantidade,
-
-                    precoUnitario,
-                };
-            }
-        );
+        const { itensPedido, totalCentavos } = precificarItens(sacola.itens, produtosComPromocao);
 
         /**
          * ---------------------------------------
@@ -490,6 +351,7 @@ export async function listarPedidosDoUsuario(
 
       criadoEm: true,
 
+      entregueEm: true,
       expiraEm: true,
 
       destinatario: true,
@@ -957,6 +819,7 @@ export async function atualizarStatusPedido(
           data: {
             status:
               novoStatus,
+            ...(novoStatus === "ENTREGUE" && !pedido.entregueEm ? { entregueEm: new Date() } : {}),
           },
         });
 
@@ -985,6 +848,7 @@ export async function atualizarStatusPedido(
        * utilizadas pelo painel administrativo.
        */
 
+      await notificarStatusPedido(tx, { ...pedido, status: novoStatus });
       return tx.pedido.findUnique({
         where: {
           id:
@@ -1224,6 +1088,7 @@ export async function atualizarEnderecoDoPedido({
   endereco,
 }) {
   return prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`SELECT "id" FROM "Pedido" WHERE "id" = ${pedidoId} AND "usuarioId" = ${usuarioId} FOR UPDATE`;
     // 1. BUSCAR PEDIDO DO USUÁRIO
 
     const pedido = await tx.pedido.findFirst({
@@ -1237,6 +1102,8 @@ export async function atualizarEnderecoDoPedido({
         usuarioId: true,
         status: true,
         expiraEm: true,
+        itens: true,
+        pagamentos: { select: { status: true } },
       },
     });
 
@@ -1273,6 +1140,7 @@ export async function atualizarEnderecoDoPedido({
       throw error;
     }
 
+    if ((pedido.pagamentos || []).some(p => ["PENDENTE", "PROCESSANDO", "APROVADO"].includes(p.status))) throw falhaCheckout("Existe um pagamento em andamento. O endereço não pode ser alterado agora.", 409);
     // 4. ATUALIZAÇÃO CONDICIONAL
     //
     // Confere novamente o status, o proprietário

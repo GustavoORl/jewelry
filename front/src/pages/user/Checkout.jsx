@@ -22,6 +22,7 @@ import {
 
 import FaixaNavegacao from "../../components/common/FaixaNavegacao.jsx";
 import { apiFetch } from "../../services/api.js";
+import { buscarCep } from "../../services/cepService.js";
 
 // ============================================================
 // FUNÇÕES AUXILIARES
@@ -348,6 +349,39 @@ export default function Checkout() {
         useState(false);
 
     const [erro, setErro] = useState("");
+    const [mensagemCep, setMensagemCep] = useState("");
+    const [cepParaBusca, setCepParaBusca] = useState("");
+
+    useEffect(() => {
+        const cep = cepParaBusca.replace(/\D/g, "");
+        if (!usarNovoEndereco || cep.length !== 8) return;
+        const controle = new AbortController();
+        let ativo = true;
+        const enderecoAntes = { ...endereco };
+        const atraso = setTimeout(async () => {
+            setMensagemCep("Buscando endereço pelo CEP...");
+            const limite = setTimeout(() => controle.abort(), 8000);
+            try {
+                const campos = await buscarCep(cep, { signal: controle.signal });
+                if (!ativo) return;
+                setEndereco(atual => {
+                    if (atual.cep.replace(/\D/g, "") !== cep) return atual;
+                    const preenchidos = { ...atual };
+                    for (const [campo, valor] of Object.entries(campos)) {
+                        // Preserva alterações manuais feitas durante a consulta.
+                        if (atual[campo] === enderecoAntes[campo]) preenchidos[campo] = valor;
+                    }
+                    return preenchidos;
+                });
+                setMensagemCep("Endereço encontrado. Confira os dados e informe o número. Campos podem ser editados.");
+            } catch (e) {
+                if (ativo) setMensagemCep(e.name === "AbortError" ? "A consulta demorou mais que o esperado. Preencha o endereço manualmente." : e.message);
+            } finally { clearTimeout(limite); }
+        }, 450);
+        return () => { ativo = false; clearTimeout(atraso); controle.abort(); };
+        // A consulta acompanha somente o CEP; editar a rua não inicia nova busca.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [cepParaBusca, usarNovoEndereco]);
 
     // ========================================================
     // CARREGAR CHECKOUT
@@ -588,7 +622,7 @@ export default function Checkout() {
 
         if (editandoPedido) {
             const total = Number(
-                pedidoExistente?.valorTotal || 0
+                pedidoExistente?.itens?.reduce((s, i) => s + Number(i.precoUnitario) * i.quantidade, 0) ?? 0
             );
 
             return {
@@ -710,6 +744,7 @@ export default function Checkout() {
         }
 
         if (name === "cep") {
+            setMensagemCep("");
             const numeros = value
                 .replace(/\D/g, "")
                 .slice(0, 8);
@@ -723,6 +758,7 @@ export default function Checkout() {
                     : numeros;
         }
 
+        if (name === "cep") setCepParaBusca(novoValor);
         setEndereco((atual) => ({
             ...atual,
             [name]: novoValor,
@@ -1407,6 +1443,7 @@ export default function Checkout() {
                                         )}
                                 </div>
 
+                                <p role="status" aria-live="polite" className="mb-4 text-xs text-[#756C5C]">{mensagemCep}</p>
                                 <div className="grid grid-cols-1 gap-x-5 gap-y-5 sm:grid-cols-2">
                                     {camposEndereco.map(
                                         (campo) => (
@@ -1575,7 +1612,7 @@ export default function Checkout() {
 
                             <p className="text-xs leading-5 text-[#756C5C]">
                                 {editandoPedido
-                                    ? "As alterações serão registradas no pedido existente. Os produtos, valores e prazo de pagamento não serão modificados."
+                                    ? "As alterações serão registradas no pedido existente. Os produtos e o prazo de pagamento serão preservados. O valor do pedido será preservado."
                                     : "Confira o endereço antes de confirmar. Os dados serão registrados no pedido para preservar as informações da entrega."}
                             </p>
                         </div>
@@ -1613,7 +1650,8 @@ export default function Checkout() {
 
                         <div className="mt-6 divide-y divide-[#E9DCC4]">
                             {itensSelecionados.map(
-                                (item) => {
+                                (itemOriginal) => {
+                                    const item = itemOriginal;
                                     const emPromocao =
                                         !editandoPedido &&
                                         item.emPromocao ===
@@ -1827,19 +1865,6 @@ export default function Checkout() {
                                 </span>
                             </div>
 
-                            {/* FRETE */}
-
-                            {!editandoPedido && (
-                                <div className="flex justify-between gap-4 text-[#756C5C]">
-                                    <span>
-                                        Frete
-                                    </span>
-
-                                    <span>
-                                        A calcular
-                                    </span>
-                                </div>
-                            )}
 
                             {/* TOTAL */}
 
@@ -1847,13 +1872,11 @@ export default function Checkout() {
                                 <span className="font-medium">
                                     {editandoPedido
                                         ? "Total a pagar"
-                                        : "Total atual"}
+                                        : "Total dos produtos"}
                                 </span>
 
                                 <span className="text-xl font-medium tabular-nums">
-                                    {formatarPreco(
-                                        total
-                                    )}
+                                    {formatarPreco(resumo.total)}
                                 </span>
                             </div>
 
@@ -1876,8 +1899,8 @@ export default function Checkout() {
 
                             <p className="text-xs leading-5 text-[#756C5C]">
                                 {editandoPedido
-                                    ? "O valor do pedido será mantido."
-                                    : "O total ainda não inclui o frete. Os preços promocionais serão validados novamente ao criar o pedido."}
+                                    ? "Os preços dos produtos são preservados. O endereço de entrega será atualizado."
+                                    : "O total corresponde aos produtos selecionados. Os valores serão validados pelo servidor antes do pagamento."}
                             </p>
                         </div>
 

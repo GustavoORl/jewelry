@@ -1,27 +1,39 @@
 
-import { useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import { Link } from "react-router-dom";
+
 import {
   AlertCircle,
   ArrowRight,
+  CalendarDays,
   CheckCircle2,
+  ChevronRight,
   Clock3,
   CreditCard,
-  LoaderCircle,
   Package,
   PackageCheck,
   ReceiptText,
+  RefreshCw,
+  RotateCcw,
   ShoppingBag,
+  SlidersHorizontal,
   Truck,
   XCircle,
 } from "lucide-react";
 
+import { filtrarHistorico } from "../../utils/filtrosCompras.js";
 import { apiFetch } from "../../services/api.js";
 import FaixaNavegacao from "../../components/common/FaixaNavegacao.jsx";
 
-// ==========================================
+// ============================================================
 // FORMATAÇÃO
-// ==========================================
+// ============================================================
 
 function formatarMoeda(valor) {
   return Number(valor || 0).toLocaleString("pt-BR", {
@@ -31,97 +43,100 @@ function formatarMoeda(valor) {
 }
 
 function formatarData(data) {
-  if (!data) return "";
+  if (!data) return "Data indisponível";
 
   const dataConvertida = new Date(data);
 
-  if (Number.isNaN(dataConvertida.getTime())) return "";
+  if (Number.isNaN(dataConvertida.getTime())) {
+    return "Data indisponível";
+  }
 
   return new Intl.DateTimeFormat("pt-BR", {
     day: "2-digit",
-    month: "2-digit",
+    month: "long",
     year: "numeric",
-  }).format(dataConvertida);
-}
-
-function formatarDataHora(data) {
-  if (!data) return "";
-
-  const dataConvertida = new Date(data);
-
-  if (Number.isNaN(dataConvertida.getTime())) return "";
-
-  return new Intl.DateTimeFormat("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
   }).format(dataConvertida);
 }
 
 function reduzirId(id) {
-  if (!id) return "";
-  return id.slice(-8).toUpperCase();
+  if (!id) return "—";
+  return String(id).slice(-8).toUpperCase();
 }
 
-// ==========================================
-// STATUS DO PEDIDO
-// ==========================================
+// ============================================================
+// STATUS
+// ============================================================
 
 const STATUS_PEDIDO = {
   PENDENTE: {
     texto: "Aguardando pagamento",
-    descricao: "Seu pedido foi criado e está aguardando a conclusão do pagamento.",
+    descricao:
+      "Seu pedido foi criado e está aguardando a conclusão do pagamento.",
     Icone: Clock3,
-    classe: "border-amber-200 bg-amber-50 text-amber-700",
+    classe:
+      "border-[#EEDDBD] bg-[#FBF3E6] text-[#9B6A2C]",
   },
+
   PAGO: {
     texto: "Pagamento aprovado",
-    descricao: "Recebemos seu pagamento e o pedido será preparado em breve.",
+    descricao:
+      "Recebemos seu pagamento e o pedido será preparado em breve.",
     Icone: CheckCircle2,
-    classe: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    classe:
+      "border-[#D1E5DE] bg-[#EAF3F0] text-[#537B72]",
   },
+
   EM_PREPARACAO: {
     texto: "Em preparação",
-    descricao: "Seu pedido está sendo preparado com todo cuidado.",
+    descricao:
+      "Seu pedido está sendo preparado com todo cuidado.",
     Icone: Package,
-    classe: "border-[#E9DCC4] bg-[#F8F3E8] text-[#75633D]",
+    classe:
+      "border-[#E5D9EC] bg-[#F3EDF7] text-[#876A9B]",
   },
+
   ENVIADO: {
     texto: "Pedido enviado",
     descricao: "Seu pedido já saiu para entrega.",
     Icone: Truck,
-    classe: "border-blue-200 bg-blue-50 text-blue-700",
+    classe:
+      "border-[#D8E5F0] bg-[#EDF3F9] text-[#587A9B]",
   },
+
   ENTREGUE: {
     texto: "Pedido entregue",
     descricao: "Seu pedido foi entregue.",
     Icone: PackageCheck,
-    classe: "border-emerald-200 bg-emerald-50 text-emerald-700",
+    classe:
+      "border-[#D7E7D5] bg-[#EDF5EC] text-[#547D5D]",
   },
+
   CANCELADO: {
     texto: "Pedido cancelado",
     descricao: "Este pedido foi cancelado.",
     Icone: XCircle,
-    classe: "border-red-200 bg-red-50 text-red-700",
+    classe:
+      "border-[#F0D8D5] bg-[#FBEEEE] text-[#A45B52]",
   },
 };
 
 function obterStatusPedido(status) {
   return (
     STATUS_PEDIDO[status] || {
-      texto: status?.replaceAll("_", " ")?.toLowerCase() || "Pedido",
+      texto:
+        status?.replaceAll("_", " ").toLowerCase() ||
+        "Pedido",
       descricao: "Consulte os detalhes do pedido.",
       Icone: Package,
-      classe: "border-gray-200 bg-gray-50 text-gray-700",
+      classe:
+        "border-[#EAE0D1] bg-[#F7F2E8] text-[#746B60]",
     }
   );
 }
 
-// ==========================================
+// ============================================================
 // PAGAMENTO
-// ==========================================
+// ============================================================
 
 function formatarMetodoPagamento(metodo) {
   if (!metodo) return null;
@@ -139,7 +154,7 @@ function formatarMetodoPagamento(metodo) {
 
   return (
     metodos[metodo] ||
-    metodo
+    String(metodo)
       .replaceAll("_", " ")
       .toLowerCase()
       .replace(/\b\w/g, (letra) => letra.toUpperCase())
@@ -161,53 +176,272 @@ function formatarStatusPagamento(status) {
 
   return (
     statusPagamento[status] ||
-    status
+    String(status)
       .replaceAll("_", " ")
       .toLowerCase()
       .replace(/\b\w/g, (letra) => letra.toUpperCase())
   );
 }
 
-// ==========================================
+// ============================================================
+// COMPONENTES AUXILIARES
+// ============================================================
+
+function StatusBadge({ status }) {
+  const config = obterStatusPedido(status);
+  const Icone = config.Icone;
+
+  return (
+    <span
+      className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-[11px] font-medium ${config.classe}`}
+    >
+      <Icone size={14} strokeWidth={1.8} />
+      {config.texto}
+    </span>
+  );
+}
+
+function ProdutoHistorico({ item, ultimo }) {
+  const imagem =
+    item.produto?.imagens?.[0]?.url ||
+    item.produto?.imagem ||
+    item.produto?.imagemUrl ||
+    null;
+
+  const textoAlternativo =
+    item.produto?.imagens?.[0]?.textoAlternativo ||
+    item.nomeProduto ||
+    "Produto";
+
+  const produtoId = item.produtoId;
+
+  const subtotal =
+    Number(item.precoUnitario || 0) *
+    Number(item.quantidade || 0);
+
+  const imagemConteudo = imagem ? (
+    <img
+      src={imagem}
+      alt={textoAlternativo}
+      loading="lazy"
+      className="h-full w-full object-cover transition-transform duration-500 group-hover/produto:scale-105"
+    />
+  ) : (
+    <Package
+      size={25}
+      strokeWidth={1.4}
+      className="text-[#B9A77F]"
+    />
+  );
+
+  return (
+    <div
+      className={`flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-5 ${
+        ultimo ? "" : "border-b border-[#F0EADF]"
+      }`}
+    >
+      <div className="flex min-w-0 items-center gap-4">
+        {produtoId ? (
+          <Link
+            to={`/produtos/${produtoId}`}
+            className="group/produto flex h-[82px] w-[82px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F7F2E8] sm:h-[90px] sm:w-[90px]"
+          >
+            {imagemConteudo}
+          </Link>
+        ) : (
+          <div className="flex h-[82px] w-[82px] shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[#F7F2E8] sm:h-[90px] sm:w-[90px]">
+            {imagemConteudo}
+          </div>
+        )}
+
+        <div className="min-w-0">
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-[0.16em] text-[#A47B43]">
+            AURELIA
+          </p>
+
+          {produtoId ? (
+            <Link
+              to={`/produtos/${produtoId}`}
+              className="line-clamp-2 text-sm font-medium leading-relaxed text-[#211C14] transition hover:text-[#968052]"
+            >
+              {item.nomeProduto || "Produto"}
+            </Link>
+          ) : (
+            <p className="line-clamp-2 text-sm font-medium leading-relaxed text-[#211C14]">
+              {item.nomeProduto || "Produto"}
+            </p>
+          )}
+
+          <p className="mt-2 text-xs text-[#81776A]">
+            Quantidade: {item.quantidade}
+          </p>
+
+          <p className="mt-1 text-[11px] text-[#9B9183]">
+            Unitário: {formatarMoeda(item.precoUnitario)}
+          </p>
+        </div>
+      </div>
+
+      <div className="flex items-center justify-between border-t border-[#F3EDE3] pt-3 sm:block sm:border-0 sm:pt-0 sm:text-right">
+        <p className="text-[11px] text-[#9B9183]">
+          Subtotal
+        </p>
+
+        <p className="text-sm font-semibold text-[#211C14]">
+          {formatarMoeda(subtotal)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function InformacaoComplementar({
+  Icone,
+  titulo,
+  principal,
+  secundario,
+}) {
+  return (
+    <div className="flex min-w-0 items-start gap-3 rounded-2xl bg-[#FAF7F1] p-4 sm:p-5">
+      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#968052]">
+        <Icone size={17} strokeWidth={1.7} />
+      </div>
+
+      <div className="min-w-0">
+        <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#A47B43]">
+          {titulo}
+        </p>
+
+        <p className="break-words text-sm font-medium text-[#211C14]">
+          {principal}
+        </p>
+
+        {secundario && (
+          <p className="mt-1.5 text-xs leading-relaxed text-[#81776A]">
+            {secundario}
+          </p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function SkeletonHistorico() {
+  return (
+    <div className="animate-pulse overflow-hidden rounded-[22px] border border-[#EAE0D1] bg-white">
+      <div className="flex items-center justify-between gap-4 border-b border-[#F0EADF] p-6">
+        <div className="space-y-3">
+          <div className="h-3 w-20 rounded bg-[#EEE7DC]" />
+          <div className="h-5 w-36 rounded bg-[#EEE7DC]" />
+        </div>
+
+        <div className="h-8 w-32 rounded-full bg-[#EEE7DC]" />
+      </div>
+
+      <div className="space-y-4 p-6">
+        <div className="flex gap-4">
+          <div className="h-20 w-20 rounded-xl bg-[#EEE7DC]" />
+
+          <div className="flex-1 space-y-3">
+            <div className="h-4 w-2/3 rounded bg-[#EEE7DC]" />
+            <div className="h-3 w-1/3 rounded bg-[#EEE7DC]" />
+          </div>
+        </div>
+
+        <div className="h-20 rounded-2xl bg-[#F7F3EB]" />
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
 // COMPONENTE PRINCIPAL
-// ==========================================
+// ============================================================
 
 export default function HistoricoCompras() {
-  const [pedidos, setPedidos] = useState([]);
+  const [todosPedidos, setPedidos] = useState([]);
   const [carregando, setCarregando] = useState(true);
+  const [atualizando, setAtualizando] = useState(false);
   const [erro, setErro] = useState("");
+
+  const [periodo, setPeriodo] = useState("TODOS");
+  const [inicio, setInicio] = useState("");
+  const [fim, setFim] = useState("");
 
   // ==========================================
   // CARREGAR PEDIDOS
   // ==========================================
 
-  useEffect(() => {
-    async function carregarPedidos() {
-      try {
+  const carregarPedidos = useCallback(async (silencioso = false) => {
+    try {
+      if (silencioso) {
+        setAtualizando(true);
+      } else {
         setCarregando(true);
-        setErro("");
-
-        const resposta = await apiFetch("/pedidos");
-
-        if (!resposta || !Array.isArray(resposta.pedidos)) {
-          throw new Error("A API não retornou os pedidos corretamente.");
-        }
-
-        setPedidos(resposta.pedidos);
-      } catch (error) {
-        console.error("Erro ao carregar histórico de compras:", error);
-
-        setErro(error.message || "Não foi possível carregar suas compras.");
-      } finally {
-        setCarregando(false);
       }
-    }
 
-    carregarPedidos();
+      setErro("");
+
+      const resposta = await apiFetch("/pedidos");
+
+      if (!resposta || !Array.isArray(resposta.pedidos)) {
+        throw new Error(
+          "A API não retornou os pedidos corretamente."
+        );
+      }
+
+      setPedidos(resposta.pedidos);
+    } catch (error) {
+      console.error(
+        "Erro ao carregar histórico de compras:",
+        error
+      );
+
+      setErro(
+        error.message ||
+          "Não foi possível carregar suas compras."
+      );
+    } finally {
+      setCarregando(false);
+      setAtualizando(false);
+    }
   }, []);
 
+  useEffect(() => {
+    carregarPedidos();
+  }, [carregarPedidos]);
+
   // ==========================================
-  // INFORMAÇÕES RESUMIDAS
+  // FILTROS
+  // ==========================================
+
+  const pedidos = useMemo(
+    () =>
+      filtrarHistorico(todosPedidos, {
+        periodo,
+        inicio,
+        fim,
+      }),
+    [todosPedidos, periodo, inicio, fim]
+  );
+
+  const periodoInvalido =
+    periodo === "PERSONALIZADO" &&
+    inicio &&
+    fim &&
+    inicio > fim;
+
+  const filtrosAtivos =
+    periodo !== "TODOS" || inicio !== "" || fim !== "";
+
+  function limparFiltros() {
+    setPeriodo("TODOS");
+    setInicio("");
+    setFim("");
+  }
+
+  // ==========================================
+  // RESUMO
   // ==========================================
 
   const quantidadePedidos = pedidos.length;
@@ -215,58 +449,30 @@ export default function HistoricoCompras() {
   const quantidadeProdutos = useMemo(() => {
     return pedidos.reduce((total, pedido) => {
       const quantidade =
-        pedido.itens?.reduce((subtotal, item) => {
-          return subtotal + Number(item.quantidade || 0);
-        }, 0) || 0;
+        pedido.itens?.reduce(
+          (subtotal, item) =>
+            subtotal + Number(item.quantidade || 0),
+          0
+        ) || 0;
 
       return total + quantidade;
     }, 0);
   }, [pedidos]);
 
-  // ==========================================
-  // VERIFICAR PAGAMENTO
-  // ==========================================
-
-  function podeContinuarPagamento(pedido) {
-    if (pedido.status !== "PENDENTE") return false;
-
-    if (!pedido.expiraEm) return true;
-
-    const expiraEm = new Date(pedido.expiraEm).getTime();
-
-    if (Number.isNaN(expiraEm)) return false;
-
-    return expiraEm > Date.now();
-  }
-
-  // ==========================================
-  // LOADING
-  // ==========================================
-
-  if (carregando) {
-    return (
-      <main className="min-h-screen bg-[#FCFAF5]">
-        <div className="mx-auto flex min-h-[70vh] max-w-[1240px] items-center justify-center px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col items-center gap-4 text-center">
-            <LoaderCircle size={36} className="animate-spin text-[#968052]" />
-
-            <div>
-              <p className="font-serif text-xl text-[#211C14]">
-                Carregando suas compras
-              </p>
-
-              <p className="mt-1 text-sm text-[#756C5C]">
-                Estamos buscando seu histórico de pedidos.
-              </p>
-            </div>
-          </div>
-        </div>
-      </main>
+  const totalCompras = useMemo(() => {
+    return pedidos.reduce(
+      (total, pedido) =>
+        total + Number(pedido.valorTotal || 0),
+      0
     );
-  }
+  }, [pedidos]);
+
+  // ==========================================
+  // RENDERIZAÇÃO
+  // ==========================================
 
   return (
-    <main className="min-h-screen bg-[#FCFAF5]">
+    <main className="min-h-screen bg-[#FCFAF6] text-[#211C14]">
       {/* NAVEGAÇÃO */}
 
       <div className="w-full max-md:hidden">
@@ -279,114 +485,311 @@ export default function HistoricoCompras() {
         />
       </div>
 
-      <div className="mx-auto max-w-[1240px] px-4 py-8 sm:px-6 lg:px-8 lg:py-12">
+      <div className="mx-auto max-w-[1180px] px-5 pb-20 pt-10 sm:px-8 lg:px-10 lg:pt-14">
+        {/* ===================================== */}
         {/* CABEÇALHO */}
+        {/* ===================================== */}
 
-        <section className="mb-10">
-          <div className="flex items-start gap-4">
-            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-[#E9DCC4] bg-[#F8F3E8] text-[#968052]">
-              <ShoppingBag size={22} />
-            </div>
+        <section className="mb-9 flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="mb-3 text-[10px] font-semibold uppercase tracking-[0.28em] text-[#A47B43]">
+              Minha conta
+            </p>
 
-            <div>
+            <h1 className="font-serif text-3xl tracking-tight text-[#211C14] sm:text-4xl">
+              Minhas compras
+            </h1>
 
-              <h1 className="font-serif text-3xl text-[#211C14] sm:text-4xl">
-                Minhas compras
-              </h1>
-
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-[#756C5C] sm:text-base">
-                Acompanhe seus pedidos, pagamentos e o andamento das suas compras.
-              </p>
-            </div>
+            <p className="mt-3 max-w-xl text-sm leading-relaxed text-[#81776A]">
+              Consulte seus pedidos entregues, cancelados e
+              reembolsados. Use o período para encontrar suas compras.
+            </p>
           </div>
+
+          <button
+            type="button"
+            onClick={() => carregarPedidos(true)}
+            disabled={carregando || atualizando}
+            className="inline-flex w-fit items-center gap-2 rounded-full border border-[#E5D9C6] bg-white px-4 py-2.5 text-xs font-medium text-[#514635] transition hover:border-[#B9975B] hover:bg-[#F7F2E8] disabled:cursor-wait disabled:opacity-60"
+          >
+            <RefreshCw
+              size={15}
+              className={atualizando ? "animate-spin" : ""}
+            />
+            Atualizar compras
+          </button>
         </section>
 
-        {/* ERRO */}
+        {/* ===================================== */}
+        {/* FILTROS */}
+        {/* ===================================== */}
 
-        {erro && (
-          <div className="mb-8 flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-4 text-red-700">
-            <AlertCircle size={20} className="mt-0.5 shrink-0" />
+        <section
+          aria-label="Filtrar histórico por período"
+          className="mb-8 rounded-[20px] border border-[#EAE0D1] bg-white p-4 sm:p-5"
+        >
+          <div className="mb-4 flex items-center gap-2">
+            <SlidersHorizontal
+              size={16}
+              className="text-[#968052]"
+            />
 
-            <div>
-              <p className="font-medium">
-                Não foi possível carregar suas compras
-              </p>
-
-              <p className="mt-1 text-sm">{erro}</p>
-            </div>
+            <h2 className="text-sm font-semibold text-[#211C14]">
+              Filtrar compras
+            </h2>
           </div>
-        )}
 
-        {/* SEM PEDIDOS */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <label className="flex-1">
+              <span className="mb-2 block text-[11px] font-medium text-[#746B60]">
+                Período
+              </span>
 
-        {!erro && pedidos.length === 0 && (
-          <section className="rounded-2xl border border-[#E9DCC4] bg-white px-6 py-16 text-center shadow-sm">
-            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#F8F3E8] text-[#968052]">
-              <ShoppingBag size={28} />
+              <div className="relative">
+                <select
+                  aria-label="Período das compras"
+                  value={periodo}
+                  onChange={(event) =>
+                    setPeriodo(event.target.value)
+                  }
+                  className="w-full appearance-none rounded-xl border border-[#E8DDCA] bg-[#FCFAF6] px-4 py-3 pr-10 text-xs text-[#40382F] outline-none transition focus:border-[#968052] sm:text-sm"
+                >
+                  <option value="TODOS">Todo o período</option>
+                  <option value="30">Últimos 30 dias</option>
+                  <option value="90">Últimos 90 dias</option>
+                  <option value="365">Últimos 365 dias</option>
+                  <option value="PERSONALIZADO">
+                    Escolher datas
+                  </option>
+                </select>
+
+                <ChevronRight
+                  size={15}
+                  className="pointer-events-none absolute right-3.5 top-1/2 -translate-y-1/2 rotate-90 text-[#968052]"
+                />
+              </div>
+            </label>
+
+            {periodo === "PERSONALIZADO" && (
+              <>
+                <label className="flex-1">
+                  <span className="mb-2 block text-[11px] font-medium text-[#746B60]">
+                    Data inicial
+                  </span>
+
+                  <input
+                    type="date"
+                    aria-label="Data inicial das compras"
+                    value={inicio}
+                    onChange={(event) =>
+                      setInicio(event.target.value)
+                    }
+                    className="w-full rounded-xl border border-[#E8DDCA] bg-[#FCFAF6] px-4 py-3 text-xs text-[#40382F] outline-none transition focus:border-[#968052] sm:text-sm"
+                  />
+                </label>
+
+                <label className="flex-1">
+                  <span className="mb-2 block text-[11px] font-medium text-[#746B60]">
+                    Data final
+                  </span>
+
+                  <input
+                    type="date"
+                    aria-label="Data final das compras"
+                    value={fim}
+                    min={inicio || undefined}
+                    onChange={(event) =>
+                      setFim(event.target.value)
+                    }
+                    className="w-full rounded-xl border border-[#E8DDCA] bg-[#FCFAF6] px-4 py-3 text-xs text-[#40382F] outline-none transition focus:border-[#968052] sm:text-sm"
+                  />
+                </label>
+              </>
+            )}
+
+            {filtrosAtivos && (
+              <button
+                type="button"
+                onClick={limparFiltros}
+                className="inline-flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-medium text-[#968052] transition hover:bg-[#F7F2E8]"
+              >
+                <RotateCcw size={14} />
+                Limpar filtros
+              </button>
+            )}
+          </div>
+
+          {periodoInvalido && (
+            <p
+              role="alert"
+              className="mt-4 flex items-center gap-2 text-xs text-[#A45B52]"
+            >
+              <AlertCircle size={14} />
+              A data inicial deve ser anterior ou igual à data
+              final.
+            </p>
+          )}
+        </section>
+
+        {/* ===================================== */}
+        {/* CARREGAMENTO */}
+        {/* ===================================== */}
+
+        {carregando ? (
+          <div className="space-y-5">
+            {[1, 2].map((item) => (
+              <SkeletonHistorico key={item} />
+            ))}
+          </div>
+        ) : erro ? (
+          /* ERRO */
+
+          <div className="rounded-[22px] border border-[#EAE0D1] bg-white px-6 py-14 text-center">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#FBEEEE] text-[#A45B52]">
+              <AlertCircle size={25} />
+            </div>
+
+            <h2 className="mt-5 font-serif text-xl">
+              Não foi possível carregar suas compras
+            </h2>
+
+            <p className="mx-auto mt-2 max-w-md text-sm text-[#81776A]">
+              {erro}
+            </p>
+
+            <button
+              type="button"
+              onClick={() => carregarPedidos()}
+              className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#211C14] px-6 py-3 text-xs font-medium text-white transition hover:bg-[#4A3D2B]"
+            >
+              <RefreshCw size={15} />
+              Tentar novamente
+            </button>
+          </div>
+        ) : pedidos.length === 0 ? (
+          /* SEM COMPRAS */
+
+          <div className="rounded-[22px] border border-[#EAE0D1] bg-white px-6 py-16 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#F7F2E8] text-[#968052]">
+              <ShoppingBag size={28} strokeWidth={1.5} />
             </div>
 
             <h2 className="mt-5 font-serif text-2xl text-[#211C14]">
-              Você ainda não fez nenhuma compra
+              {todosPedidos.length === 0
+                ? "Sua coleção começa aqui"
+                : "Nenhuma compra neste período"}
             </h2>
 
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-[#756C5C]">
-              Quando você realizar seu primeiro pedido, ele aparecerá aqui
-              para que possa acompanhar todos os detalhes.
+            <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-[#81776A]">
+              {todosPedidos.length === 0
+                ? "Você ainda não possui compras registradas. Explore nossas coleções e encontre suas próximas peças favoritas."
+                : "Não encontramos compras para o período selecionado. Experimente ajustar as datas."}
             </p>
 
-            <Link
-              to="/produtos"
-              className="mt-7 inline-flex items-center gap-2 rounded-lg bg-[#211C14] px-6 py-3 text-sm font-semibold text-white transition hover:bg-[#968052]"
-            >
-              Explorar produtos
-              <ArrowRight size={17} />
-            </Link>
-          </section>
-        )}
+            {todosPedidos.length === 0 ? (
+              <Link
+                to="/produtos"
+                className="mt-7 inline-flex items-center gap-2 rounded-full bg-[#211C14] px-6 py-3 text-xs font-medium text-white transition hover:bg-[#4A3D2B]"
+              >
+                Explorar produtos
+                <ArrowRight size={15} />
+              </Link>
+            ) : (
+              <button
+                type="button"
+                onClick={limparFiltros}
+                className="mt-7 inline-flex items-center gap-2 rounded-full bg-[#211C14] px-6 py-3 text-xs font-medium text-white transition hover:bg-[#4A3D2B]"
+              >
+                <RotateCcw size={14} />
+                Limpar filtros
+              </button>
+            )}
+          </div>
+        ) : (
+          /* HISTÓRICO */
 
-        {/* PEDIDOS */}
-
-        {!erro && pedidos.length > 0 && (
           <>
             {/* RESUMO */}
 
-            <div className="mb-6 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-[#756C5C]">
-              <span>
-                <strong className="font-semibold text-[#211C14]">
+            <div className="mb-8 grid grid-cols-3 gap-3 sm:gap-4">
+              {[
+                {
+                  titulo: "Compras",
+                  valor: quantidadePedidos,
+                  Icone: ShoppingBag,
+                },
+                {
+                  titulo: "Peças adquiridas",
+                  valor: quantidadeProdutos,
+                  Icone: Package,
+                },
+                {
+                  titulo: "Valor das compras",
+                  valor: formatarMoeda(totalCompras),
+                  Icone: CreditCard,
+                },
+              ].map((item) => {
+                const Icone = item.Icone;
+
+                return (
+                  <div
+                    key={item.titulo}
+                    className="min-w-0 rounded-[18px] border border-[#EAE0D1] bg-white p-3.5 sm:rounded-[20px] sm:p-5"
+                  >
+                    <div className="mb-3 flex h-9 w-9 items-center justify-center rounded-full bg-[#F7F2E8] text-[#968052]">
+                      <Icone size={17} strokeWidth={1.7} />
+                    </div>
+
+                    <p className="break-words text-lg font-semibold text-[#211C14] sm:text-2xl">
+                      {item.valor}
+                    </p>
+
+                    <p className="mt-1 text-[10px] leading-snug text-[#8B8174] sm:text-xs">
+                      {item.titulo}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <p className="text-xs text-[#81776A]">
+                <span className="font-semibold text-[#211C14]">
                   {quantidadePedidos}
-                </strong>{" "}
-                {quantidadePedidos === 1 ? "pedido" : "pedidos"}
-              </span>
+                </span>{" "}
+                {quantidadePedidos === 1
+                  ? "compra encontrada"
+                  : "compras encontradas"}
+              </p>
 
-              <span className="hidden h-1 w-1 rounded-full bg-[#C8B991] sm:block" />
-
-              <span>
-                <strong className="font-semibold text-[#211C14]">
-                  {quantidadeProdutos}
-                </strong>{" "}
-                {quantidadeProdutos === 1 ? "item comprado" : "itens comprados"}
+              <span className="text-[11px] text-[#A49A8C]">
+                Histórico de compras
               </span>
             </div>
 
-            {/* LISTA DE PEDIDOS */}
+            {/* LISTA */}
 
             <div className="space-y-5">
               {pedidos.map((pedido) => {
-                const status = obterStatusPedido(pedido.status);
+                const status = obterStatusPedido(
+                  pedido.status
+                );
+
                 const IconeStatus = status.Icone;
 
-                // Preferir pagamento aprovado ou tentativa mais recente
-                const pagamentos = Array.isArray(pedido.pagamentos)
+                const pagamentos = Array.isArray(
+                  pedido.pagamentos
+                )
                   ? pedido.pagamentos
                   : [];
 
                 const pagamentoAprovado = pagamentos.find(
-                  (pagamento) => pagamento.status === "APROVADO"
+                  (pagamento) =>
+                    pagamento.status === "APROVADO"
                 );
 
-                const pagamento = pagamentoAprovado || pagamentos[0] || null;
-
-                const continuarPagamento = podeContinuarPagamento(pedido);
+                const pagamento =
+                  pagamentoAprovado || pagamentos[0] || null;
 
                 const itens = Array.isArray(pedido.itens)
                   ? pedido.itens
@@ -395,286 +798,155 @@ export default function HistoricoCompras() {
                 return (
                   <article
                     key={pedido.id}
-                    className="overflow-hidden rounded-2xl border border-[#E9DCC4] bg-white shadow-sm transition hover:shadow-md"
+                    className="overflow-hidden rounded-[22px] border border-[#EAE0D1] bg-white transition-all duration-300 hover:border-[#C9B692] hover:shadow-lg hover:shadow-[#211C14]/[0.035]"
                   >
-                    {/* TOPO DO PEDIDO */}
+                    {/* CABEÇALHO DO PEDIDO */}
 
-                    <div className="border-b border-[#EEE5D4] bg-[#FFFEFB] px-5 py-5 sm:px-6">
-                      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                        <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
-                          {/* NÚMERO */}
+                    <div className="flex flex-col gap-4 px-5 pb-5 pt-5 sm:flex-row sm:items-center sm:justify-between sm:px-7 sm:pt-6">
+                      <div>
+                        <p className="mb-2 text-[10px] font-medium uppercase tracking-[0.2em] text-[#A47B43]">
+                          Pedido
+                        </p>
 
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-[#968052]">
-                              Pedido
-                            </p>
+                        <h2
+                          className="text-lg font-semibold tracking-tight text-[#211C14]"
+                          title={pedido.id}
+                        >
+                          #{reduzirId(pedido.id)}
+                        </h2>
 
-                            <p
-                              className="mt-1 text-sm font-semibold text-[#211C14]"
-                              title={pedido.id}
-                            >
-                              #{reduzirId(pedido.id)}
-                            </p>
-                          </div>
+                        <p className="mt-2 flex items-center gap-1.5 text-xs text-[#918679]">
+                          <CalendarDays size={13} />
+                          {formatarData(pedido.criadoEm)}
+                        </p>
+                      </div>
 
-                          {/* DATA */}
+                      <StatusBadge status={pedido.status} />
+                    </div>
 
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-[#968052]">
-                              Realizado em
-                            </p>
+                    {/* STATUS */}
 
-                            <p className="mt-1 text-sm font-medium text-[#211C14]">
-                              {formatarData(pedido.criadoEm)}
-                            </p>
-                          </div>
+                    <div className="mx-5 flex items-start gap-3 rounded-2xl bg-[#FAF7F1] p-4 sm:mx-7 sm:p-5">
+                      <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white text-[#968052]">
+                        <IconeStatus
+                          size={18}
+                          strokeWidth={1.7}
+                        />
+                      </div>
 
-                          {/* TOTAL */}
-
-                          <div>
-                            <p className="text-xs uppercase tracking-[0.12em] text-[#968052]">
-                              Total
-                            </p>
-
-                            <p className="mt-1 text-sm font-semibold text-[#211C14]">
-                              {formatarMoeda(pedido.valorTotal)}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* BADGE STATUS */}
-
-                        <div className={`inline-flex w-fit items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-semibold ${status.classe}`}>
-                          <IconeStatus size={15} />
+                      <div>
+                        <p className="text-sm font-medium text-[#211C14]">
                           {status.texto}
-                        </div>
+                        </p>
+
+                        <p className="mt-1 text-xs leading-relaxed text-[#81776A]">
+                          {status.descricao}
+                        </p>
                       </div>
                     </div>
 
-                    {/* CONTEÚDO */}
+                    {/* PRODUTOS */}
 
-                    <div className="p-5 sm:p-6">
-                      {/* STATUS */}
+                    <div className="px-5 pt-6 sm:px-7">
+                      <div className="mb-3 flex items-center justify-between gap-3">
+                        <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-[#A47B43]">
+                          Peças do pedido
+                        </h3>
 
-                      <div className="mb-6 flex items-start gap-3">
-                        <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F8F3E8] text-[#968052]">
-                          <IconeStatus size={18} />
-                        </div>
-
-                        <div>
-                          <p className="font-medium text-[#211C14]">
-                            {status.texto}
-                          </p>
-
-                          <p className="mt-0.5 text-sm leading-5 text-[#756C5C]">
-                            {status.descricao}
-                          </p>
-
-                          {pedido.status === "PENDENTE" &&
-                            pedido.expiraEm &&
-                            continuarPagamento && (
-                              <p className="mt-1 text-xs text-[#968052]">
-                                Pagamento disponível até{" "}
-                                {formatarDataHora(pedido.expiraEm)}
-                              </p>
-                            )}
-                        </div>
+                        <span className="text-[11px] text-[#9B9183]">
+                          {itens.reduce(
+                            (total, item) =>
+                              total +
+                              Number(item.quantidade || 0),
+                            0
+                          )}{" "}
+                          itens
+                        </span>
                       </div>
 
-                      {/* PRODUTOS */}
-
-                      <div className="overflow-hidden rounded-xl border border-[#EEE5D4]">
+                      <div className="overflow-hidden rounded-2xl border border-[#EAE0D1]">
                         {itens.length === 0 ? (
-                          <div className="p-5 text-sm text-[#756C5C]">
+                          <div className="px-5 py-8 text-center text-sm text-[#81776A]">
                             Nenhum produto encontrado neste pedido.
                           </div>
                         ) : (
-                          itens.map((item, index) => {
-                            const imagem = item.produto?.imagens?.[0]?.url;
-
-                            const textoAlternativo =
-                              item.produto?.imagens?.[0]?.textoAlternativo;
-
-                            const produtoId = item.produtoId;
-
-                            const subtotal =
-                              Number(item.precoUnitario || 0) *
-                              Number(item.quantidade || 0);
-
-                            return (
-                              <div
-                                key={item.id}
-                                className={`flex flex-col gap-4 px-4 py-4 sm:flex-row sm:items-center sm:justify-between ${
-                                  index !== itens.length - 1
-                                    ? "border-b border-[#EEE5D4]"
-                                    : ""
-                                }`}
-                              >
-                                {/* PRODUTO */}
-
-                                <div className="flex min-w-0 items-center gap-4">
-                                  {/* IMAGEM */}
-
-                                  {imagem ? (
-                                    produtoId ? (
-                                      <Link
-                                        to={`/produto/${produtoId}`}
-                                        className="group h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-[#F8F3E8]"
-                                      >
-                                        <img
-                                          src={imagem}
-                                          alt={textoAlternativo || item.nomeProduto}
-                                          loading="lazy"
-                                          className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                                        />
-                                      </Link>
-                                    ) : (
-                                      <div className="h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-[#F8F3E8]">
-                                        <img
-                                          src={imagem}
-                                          alt={textoAlternativo || item.nomeProduto}
-                                          loading="lazy"
-                                          className="h-full w-full object-cover"
-                                        />
-                                      </div>
-                                    )
-                                  ) : (
-                                    <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg bg-[#F8F3E8]">
-                                      <Package size={24} className="text-[#B9A77F]" />
-                                    </div>
-                                  )}
-
-                                  {/* DADOS DO PRODUTO */}
-
-                                  <div className="min-w-0">
-                                    {produtoId ? (
-                                      <Link
-                                        to={`/produto/${produtoId}`}
-                                        className="line-clamp-2 text-sm font-medium text-[#211C14] transition hover:text-[#968052]"
-                                      >
-                                        {item.nomeProduto}
-                                      </Link>
-                                    ) : (
-                                      <p className="line-clamp-2 text-sm font-medium text-[#211C14]">
-                                        {item.nomeProduto}
-                                      </p>
-                                    )}
-
-                                    <p className="mt-2 text-xs text-[#756C5C]">
-                                      Quantidade: {item.quantidade}
-                                    </p>
-
-                                    <p className="mt-1 text-xs text-[#8A8172]">
-                                      Valor unitário:{" "}
-                                      {formatarMoeda(item.precoUnitario)}
-                                    </p>
-                                  </div>
-                                </div>
-
-                                {/* SUBTOTAL */}
-
-                                <div className="pl-24 sm:pl-0 sm:text-right">
-                                  <p className="text-xs text-[#8A8172]">
-                                    Subtotal
-                                  </p>
-
-                                  <p className="mt-1 whitespace-nowrap text-sm font-semibold text-[#211C14]">
-                                    {formatarMoeda(subtotal)}
-                                  </p>
-                                </div>
-                              </div>
-                            );
-                          })
+                          itens.map((item, index) => (
+                            <ProdutoHistorico
+                              key={item.id ?? index}
+                              item={item}
+                              ultimo={
+                                index === itens.length - 1
+                              }
+                            />
+                          ))
                         )}
                       </div>
+                    </div>
 
-                      {/* INFORMAÇÕES */}
+                    {/* PAGAMENTO E DESTINATÁRIO */}
 
-                      <div className="mt-5 grid gap-3 md:grid-cols-2">
-                        {/* PAGAMENTO */}
+                    <div className="mt-5 grid gap-3 px-5 sm:grid-cols-2 sm:px-7">
+                      <InformacaoComplementar
+                        Icone={CreditCard}
+                        titulo="Pagamento"
+                        principal={
+                          pagamento
+                            ? formatarMetodoPagamento(
+                                pagamento.metodo
+                              )
+                            : "Nenhum pagamento iniciado"
+                        }
+                        secundario={
+                          pagamento
+                            ? `Status: ${formatarStatusPagamento(
+                                pagamento.status
+                              )}`
+                            : null
+                        }
+                      />
 
-                        <div className="rounded-xl bg-[#F8F3E8] p-4">
-                          <div className="flex items-start gap-3">
-                            <CreditCard
-                              size={18}
-                              className="mt-0.5 shrink-0 text-[#968052]"
-                            />
+                      <InformacaoComplementar
+                        Icone={ReceiptText}
+                        titulo="Destinatário"
+                        principal={
+                          pedido.destinatario ||
+                          "Não informado"
+                        }
+                        secundario="Consulte os detalhes para visualizar as informações completas."
+                      />
+                    </div>
 
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#968052]">
-                                Pagamento
-                              </p>
+                    {/* TOTAL */}
 
-                              {pagamento ? (
-                                <>
-                                  <p className="mt-1 font-medium text-[#211C14]">
-                                    {formatarMetodoPagamento(pagamento.metodo)}
-                                  </p>
+                    <div className="mx-5 mt-5 flex items-center justify-between rounded-2xl border border-[#EAE0D1] bg-[#FDFBF8] px-5 py-4 sm:mx-7">
+                      <div>
+                        <p className="text-[11px] text-[#81776A]">
+                          Valor total do pedido
+                        </p>
 
-                                  <p className="mt-1 text-sm text-[#756C5C]">
-                                    Status:{" "}
-                                    <span className="font-medium text-[#211C14]">
-                                      {formatarStatusPagamento(pagamento.status)}
-                                    </span>
-                                  </p>
-                                </>
-                              ) : (
-                                <p className="mt-1 text-sm text-[#756C5C]">
-                                  Nenhum pagamento iniciado.
-                                </p>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* DESTINATÁRIO */}
-
-                        <div className="rounded-xl bg-[#F8F3E8] p-4">
-                          <div className="flex items-start gap-3">
-                            <ReceiptText
-                              size={18}
-                              className="mt-0.5 shrink-0 text-[#968052]"
-                            />
-
-                            <div>
-                              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-[#968052]">
-                                Destinatário
-                              </p>
-
-                              <p className="mt-1 font-medium text-[#211C14]">
-                                {pedido.destinatario || "Não informado"}
-                              </p>
-
-                              <p className="mt-1 text-sm text-[#756C5C]">
-                                Consulte os detalhes para ver as informações
-                                completas do pedido.
-                              </p>
-                            </div>
-                          </div>
-                        </div>
+                        <p className="mt-1 text-[10px] text-[#A49A8C]">
+                          {itens.length}{" "}
+                          {itens.length === 1
+                            ? "produto diferente"
+                            : "produtos diferentes"}
+                        </p>
                       </div>
 
-                      {/* AÇÕES */}
+                      <p className="text-lg font-semibold text-[#211C14] sm:text-xl">
+                        {formatarMoeda(pedido.valorTotal)}
+                      </p>
+                    </div>
 
-                      <div className="mt-6 flex flex-col-reverse gap-3 border-t border-[#EEE5D4] pt-5 sm:flex-row sm:items-center sm:justify-end">
-                        <Link
-                          to={`/pedidos/${pedido.id}`}
-                          className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#DCCDAF] px-5 py-2.5 text-sm font-semibold text-[#4E4639] transition hover:border-[#968052] hover:text-[#968052]"
-                        >
-                          Ver detalhes
-                          <ArrowRight size={16} />
-                        </Link>
+                    {/* RODAPÉ */}
 
-                        {continuarPagamento && (
-                          <Link
-                            to={`/pagamento/${pedido.id}`}
-                            className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#211C14] px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-[#968052]"
-                          >
-                            <CreditCard size={16} />
-                            Continuar pagamento
-                          </Link>
-                        )}
-                      </div>
+                    <div className="mt-6 flex items-center justify-end border-t border-[#F0EADF] bg-[#FDFBF8] px-5 py-4 sm:px-7">
+                      <Link
+                        to={`/pedidos/${pedido.id}`}
+                        className="inline-flex items-center gap-2 text-xs font-semibold text-[#968052] transition-colors hover:text-[#211C14]"
+                      >
+                        Ver detalhes do pedido
+                        <ChevronRight size={16} />
+                      </Link>
                     </div>
                   </article>
                 );

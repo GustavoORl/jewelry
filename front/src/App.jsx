@@ -1,3 +1,7 @@
+import PaginaNaoEncontrada from "./pages/PaginaNaoEncontrada.jsx";
+import Editorial from "./pages/Editorial.jsx";
+import AdminEditorial from "./pages/admin/AdminEditorial.jsx";
+import AdminDevolucoes from "./pages/admin/AdminDevolucoes.jsx";
 import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { useEffect } from "react";
 
@@ -21,6 +25,7 @@ import EnderecoUser from "./pages/user/EnderecoUser.jsx";
 import HistoricoCompras from "./pages/user/HistoricoCompras.jsx";
 import Configuracoes from "./pages/user/Configuracoes.jsx";
 import PerfilUser from "./pages/user/PerfilUser.jsx";
+import DevolucoesUser from "./pages/user/DevolucoesUser.jsx";
 
 import RotaProtegida from "./components/RotaProtegida.jsx";
 
@@ -60,6 +65,9 @@ export default function App() {
           {/* Loja pública */}
           <Route element={<Layout />}>
             <Route path="/" element={<Home />} />
+            <Route path="*" element={<PaginaNaoEncontrada />} />
+            <Route path="/editorial" element={<Editorial />} />
+            <Route path="/editorial/:id" element={<Editorial />} />
 
             <Route
               path="/produtos"
@@ -82,6 +90,9 @@ export default function App() {
             <Route path="/historico-compras" element={<HistoricoCompras />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
             <Route path="/perfil" element={<PerfilUser />} />
+            <Route element={<RotaProtegida />}>
+              <Route path="/devolucoes-reembolso" element={<DevolucoesUser />} />
+            </Route>
           </Route>
 
           {/* Login */}
@@ -95,6 +106,8 @@ export default function App() {
           >
             <Route path="/admin">
               <Route index element={<AdminDashboard />} />
+              <Route path="editorial" element={<AdminEditorial />} />
+              <Route path="devolucoes" element={<AdminDevolucoes />} />
 
               <Route
                 path="produtos"

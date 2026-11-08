@@ -1,5 +1,7 @@
 
 import express from "express";
+import { conversaRoutes, notificacaoRoutes } from "./routes/contatoRoutes.js";
+import { editorialPublico, devolucoesCliente } from "./routes/novidadesRoutes.js";
 import cors from "cors";
 import cookieParser from "cookie-parser";
 
@@ -39,8 +41,10 @@ app.use(
 );
 
 
-app.use(express.json());
+app.use(express.json({ limit: "1mb" }));
 app.use(cookieParser());
+app.use("/devolucoes", conversaRoutes);
+app.use("/notificacoes", notificacaoRoutes);
 
 app.use("/webhooks", webhookRoutes);
 
@@ -52,6 +56,8 @@ app.get("/health", (req, res) => {
 });
 
 // Rotas públicas
+app.use("/editorial", editorialPublico);
+app.use("/devolucoes", devolucoesCliente);
 app.use("/", authRoutes);
 app.use("/usuario", usuarioPublicoRoutes);
 app.use("/produtos", produtoPublicoRoutes);

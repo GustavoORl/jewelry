@@ -29,6 +29,8 @@ const navigation = [
   { label: "Visão geral", icon: LayoutDashboard, to: "/admin", end: true },
   { label: "Produtos", icon: Package, to: "/admin/produtos" },
   { label: "Pedidos", icon: ShoppingBag, to: "/admin/pedidos" },
+  { label: "Editorial / Blog", icon: Tags, to: "/admin/editorial" },
+  { label: "Devoluções", icon: ShoppingBag, to: "/admin/devolucoes" },
   { label: "Clientes", icon: Users, to: "/admin/clientes" },
   { label: "Categorias", icon: Tags, to: "/admin/categorias" },
   { label: "Materiais", icon: Gem, to: "/admin/materiais" },

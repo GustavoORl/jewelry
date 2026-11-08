@@ -1,3 +1,4 @@
+import EditorialCarrossel from "./EditorialCarrossel.jsx";
 
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -218,36 +219,7 @@ export default function Promocoes() {
                     {/* SEGUNDO BANNER - EDITORIAL */}
                     {/* ================================= */}
 
-                    <article className="relative flex min-h-[300px] items-end overflow-hidden rounded-[20px] bg-[#302719] text-white md:h-[312px]">
-
-                        <img
-                            src="/assets/images/promocao-joia.png"
-                            alt="Editorial de joias Aurora"
-                            className="absolute inset-0 h-full w-full object-cover object-center"
-                        />
-
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-black/10" />
-
-                        <div className="relative z-10 w-full p-6 sm:p-8">
-
-                            <span className="text-[10px] font-semibold uppercase tracking-[2px] text-white/90">
-                                Editorial / Aurora
-                            </span>
-
-                            <h2 className="mt-2 font-serif text-2xl leading-tight sm:text-[27px]">
-                                O encanto está em cada detalhe
-                            </h2>
-
-                            <Link
-                                to="/produtos"
-                                className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#FCFAF6] px-6 py-3 text-xs font-medium text-[#241F16] transition hover:bg-white"
-                            >
-                                Conhecer coleção
-
-                                <ArrowRight size={15} />
-                            </Link>
-                        </div>
-                    </article>
+                    <EditorialCarrossel />
                 </div>
 
                 {/* ===================================== */}

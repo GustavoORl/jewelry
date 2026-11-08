@@ -156,7 +156,7 @@ export default function Hero() {
             </Link>
 
             <a
-              href="#editorial"
+              href="/editorial"
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-full border border-[#B7A78C] px-6 text-xs font-medium transition-all duration-300 hover:bg-[#EDE3D1]"
             >
               <Play size={14} />
