@@ -1,5 +1,6 @@
 
 import { useEffect, useState } from "react";
+import { apiRequest } from "../../services/api.js";
 
 import {
   AlertCircle,
@@ -21,12 +22,8 @@ export default function FotoDevolucao({
     setUrl("");
     setErro(false);
 
-    const API_URL = (
-      import.meta.env.VITE_API_URL || ""
-    ).replace(/\/+$/, "");
-
-    fetch(
-      `${API_URL}/devolucoes/fotos/${id}`,
+    apiRequest(
+      `/devolucoes/fotos/${id}`,
       {
         credentials: "include",
         signal: controle.signal,
